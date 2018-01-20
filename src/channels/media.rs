@@ -60,6 +60,144 @@ impl ToString for StreamType {
     }
 }
 
+/// Generic, movie, TV show, music track, or photo metadata.
+#[derive(Debug)]
+pub enum Metadata {
+    Generic(GenericMediaMetadata),
+    Movie(MovieMediaMetadata),
+    TvShow(TvShowMediaMetadata),
+    MusicTrack(MusicTrackMediaMetadata),
+    Photo(PhotoMediaMetadata),
+}
+
+/// Generic media metadata.
+///
+/// See also https://developers.google.com/cast/docs/reference/messages#GenericMediaMetadata.
+#[derive(Debug)]
+pub struct GenericMediaMetadata {
+    /// Descriptive title of the content.
+    pub title: Option<String>,
+    /// Descriptive subtitle of the content.
+    pub subtitle: Option<String>,
+    /// Zero or more URLs to an image associated with the content.
+    pub images: Vec<Image>,
+    /// Date and time the content was released, formatted as ISO 8601.
+    pub release_date: Option<String>,
+}
+
+/// Movie media metadata.
+///
+/// See also https://developers.google.com/cast/docs/reference/messages#MovieMediaMetadata.
+#[derive(Debug)]
+pub struct MovieMediaMetadata {
+    /// Title of the movie.
+    pub title: Option<String>,
+    /// Subtitle of the movie.
+    pub subtitle: Option<String>,
+    /// Studio which released the movie.
+    pub studio: Option<String>,
+    /// Zero or more URLs to an image associated with the content.
+    pub images: Vec<Image>,
+    /// Date and time the movie was released, formatted as ISO 8601.
+    pub release_date: Option<String>,
+}
+
+/// TV show media metadata.
+///
+/// See also https://developers.google.com/cast/docs/reference/messages#TvShowMediaMetadata.
+#[derive(Debug)]
+pub struct TvShowMediaMetadata {
+    /// Title of the TV series.
+    pub series_title: Option<String>,
+    /// Title of the episode.
+    pub episode_title: Option<String>,
+    /// Season number of the TV show.
+    pub season: Option<u32>,
+    /// Episode number (in the season) of the episode.
+    pub episode: Option<u32>,
+    /// Zero or more URLs to an image associated with the content.
+    pub images: Vec<Image>,
+    /// Date and time this episode was released, formatted as ISO 8601.
+    pub original_air_date: Option<String>,
+}
+
+/// Music track media metadata.
+///
+/// See also https://developers.google.com/cast/docs/reference/messages#MusicTrackMediaMetadata.
+#[derive(Debug)]
+pub struct MusicTrackMediaMetadata {
+    /// Album or collection from which the track is taken.
+    pub album_name: Option<String>,
+    /// Name of the track (for example, song title).
+    pub title: Option<String>,
+    /// Name of the artist associated with the album featuring this track.
+    pub album_artist: Option<String>,
+    /// Name of the artist associated with the track.
+    pub artist: Option<String>,
+    /// Name of the composer associated with the track.
+    pub composer: Option<String>,
+    /// Number of the track on the album.
+    pub track_number: Option<u32>,
+    /// Number of the volume (for example, a disc) of the album.
+    pub disc_number: Option<u32>,
+    /// Zero or more URLs to an image associated with the content.
+    pub images: Vec<Image>,
+    /// Date and time the content was released, formatted as ISO 8601.
+    pub release_date: Option<String>,
+}
+
+/// Photo media metadata.
+///
+/// See also https://developers.google.com/cast/docs/reference/messages#PhotoMediaMetadata.
+#[derive(Debug)]
+pub struct PhotoMediaMetadata {
+    /// Title of the photograph.
+    pub title: Option<String>,
+    /// Name of the photographer.
+    pub artist: Option<String>,
+    /// Verbal location where the photograph was taken, for example “Madrid, Spain”.
+    pub location: Option<String>,
+    /// Latitude and longitude of the location where the photograph was taken.
+    pub latitude_longitude: Option<(f64, f64)>,
+    /// Width and height of the photograph in pixels.
+    pub dimensions: Option<(u32, u32)>,
+    /// Date and time the photograph was taken, formatted as ISO 8601.
+    pub creation_date_time: Option<String>,
+}
+
+/// Image URL and optionally size metadata.
+///
+/// This is the description of an image, including a small amount of metadata to
+/// allow the sender application a choice of images, depending on how it will
+/// render them. The height and width are optional on only one item in an array
+/// of images.
+///
+/// See also https://developers.google.com/cast/docs/reference/messages#Image.
+#[derive(Debug)]
+pub struct Image {
+    /// URL of the image.
+    pub url: String,
+    /// Width and height of the image.
+    pub dimensions: Option<(u32, u32)>,
+}
+
+impl Image {
+    pub fn new(url: String) -> Image {
+        Image {
+            url: url,
+            dimensions: None,
+        }
+    }
+
+    fn encode(&self) -> proxies::media::Image {
+        proxies::media::Image {
+            url: self.url.clone(),
+            width: self.dimensions.map(|d| d.0),
+            height: self.dimensions.map(|d| d.1),
+        }
+    }
+}
+
 /// Describes possible player states.
 #[derive(Debug)]
 pub enum PlayerState {
@@ -173,6 +311,8 @@ pub struct Media {
     pub stream_type: StreamType,
     /// MIME content type of the media being played.
     pub content_type: String,
+    /// Generic, movie, TV show, music track, or photo metadata.
+    pub metadata: Option<Metadata>,
     /// Duration of the currently playing stream in seconds.
     pub duration: Option<f32>,
 }
@@ -364,6 +504,56 @@ where
     {
         let request_id = self.message_manager.generate_request_id();
 
+        let metadata = media.metadata.as_ref().map(|m| match *m {
+            Metadata::Generic(ref x) => proxies::media::Metadata {
+                title: x.title.clone(),
+                subtitle: x.subtitle.clone(),
+                images: x.images.iter().map(|i| i.encode()).collect(),
+                release_date: x.release_date.clone(),
+                .. proxies::media::Metadata::new(0)
+            },
+            Metadata::Movie(ref x) => proxies::media::Metadata {
+                title: x.title.clone(),
+                subtitle: x.subtitle.clone(),
+                studio: x.studio.clone(),
+                images: x.images.iter().map(|i| i.encode()).collect(),
+                release_date: x.release_date.clone(),
+                .. proxies::media::Metadata::new(1)
+            },
+            Metadata::TvShow(ref x) => proxies::media::Metadata {
+                series_title: x.series_title.clone(),
+                subtitle: x.episode_title.clone(),
+                season: x.season,
+                episode: x.episode,
+                images: x.images.iter().map(|i| i.encode()).collect(),
+                original_air_date: x.original_air_date.clone(),
+                .. proxies::media::Metadata::new(2)
+            },
+            Metadata::MusicTrack(ref x) => proxies::media::Metadata {
+                album_name: x.album_name.clone(),
+                title: x.title.clone(),
+                album_artist: x.album_artist.clone(),
+                artist: x.artist.clone(),
+                composer: x.composer.clone(),
+                track_number: x.track_number,
+                disc_number: x.disc_number,
+                images: x.images.iter().map(|i| i.encode()).collect(),
+                release_date: x.release_date.clone(),
+                .. proxies::media::Metadata::new(3)
+            },
+            Metadata::Photo(ref x) => proxies::media::Metadata {
+                title: x.title.clone(),
+                artist: x.artist.clone(),
+                location: x.location.clone(),
+                latitude: x.latitude_longitude.map(|coord| coord.0),
+                longitude: x.latitude_longitude.map(|coord| coord.0),
+                width: x.dimensions.map(|dims| dims.0),
+                height: x.dimensions.map(|dims| dims.0),
+                creation_date_time: x.creation_date_time.clone(),
+                .. proxies::media::Metadata::new(4)
+            },
+        });
+
         let payload = serde_json::to_string(&proxies::media::MediaRequest {
             request_id: request_id,
             session_id: session_id.into().to_string(),
@@ -373,6 +563,7 @@ where
                 content_id: media.content_id.clone(),
                 stream_type: media.stream_type.to_string(),
                 content_type: media.content_type.clone(),
+                metadata: metadata,
                 duration: media.duration,
             },
 
@@ -621,6 +812,7 @@ where
                                 content_id: m.content_id.to_string(),
                                 stream_type: StreamType::from_str(m.stream_type.as_ref()).unwrap(),
                                 content_type: m.content_type.to_string(),
+                                metadata: None, // TODO
                                 duration: m.duration,
                             }
                         }),

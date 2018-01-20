@@ -75,7 +75,112 @@ pub mod media {
         #[serde(rename = "contentId")] pub content_id: String,
         #[serde(rename = "streamType", default)] pub stream_type: String,
         #[serde(rename = "contentType")] pub content_type: String,
+        #[serde(skip_serializing_if = "Option::is_none")] pub metadata: Option<Metadata>,
         #[serde(skip_serializing_if = "Option::is_none")] pub duration: Option<f32>,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct Metadata {
+        #[serde(rename = "metadataType")]
+        pub metadata_type: u32,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub title: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none", rename = "seriesTitle")]
+        pub series_title: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none", rename = "albumName")]
+        pub album_name: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub subtitle: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none", rename = "albumArtist")]
+        pub album_artist: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub artist: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub composer: Option<String>,
+
+        pub images: Vec<Image>,
+
+        #[serde(skip_serializing_if = "Option::is_none", rename = "releaseDate")]
+        pub release_date: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none", rename = "originalAirDate")]
+        pub original_air_date: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none", rename = "creationDateTime")]
+        pub creation_date_time: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub studio: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub location: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub latitude: Option<f64>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub longitude: Option<f64>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub season: Option<u32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub episode: Option<u32>,
+
+        #[serde(skip_serializing_if = "Option::is_none", rename = "trackNumber")]
+        pub track_number: Option<u32>,
+
+        #[serde(skip_serializing_if = "Option::is_none", rename = "discNumber")]
+        pub disc_number: Option<u32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub width: Option<u32>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub height: Option<u32>,
+    }
+
+    impl Metadata {
+        pub fn new(metadata_type: u32) -> Metadata {
+            Metadata {
+                metadata_type: metadata_type,
+                title: None,
+                series_title: None,
+                album_name: None,
+                subtitle: None,
+                album_artist: None,
+                artist: None,
+                composer: None,
+                images: Vec::new(),
+                release_date: None,
+                original_air_date: None,
+                creation_date_time: None,
+                studio: None,
+                location: None,
+                latitude: None,
+                longitude: None,
+                season: None,
+                episode: None,
+                track_number: None,
+                disc_number: None,
+                width: None,
+                height: None,
+            }
+        }
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct Image {
+        pub url: String,
+        #[serde(skip_serializing_if = "Option::is_none")] pub width: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")] pub height: Option<u32>,
     }
 
     #[derive(Serialize, Debug)]
