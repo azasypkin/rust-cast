@@ -546,9 +546,9 @@ where
                 artist: x.artist.clone(),
                 location: x.location.clone(),
                 latitude: x.latitude_longitude.map(|coord| coord.0),
-                longitude: x.latitude_longitude.map(|coord| coord.0),
+                longitude: x.latitude_longitude.map(|coord| coord.1),
                 width: x.dimensions.map(|dims| dims.0),
-                height: x.dimensions.map(|dims| dims.0),
+                height: x.dimensions.map(|dims| dims.1),
                 creation_date_time: x.creation_date_time.clone(),
                 .. proxies::media::Metadata::new(4)
             },
