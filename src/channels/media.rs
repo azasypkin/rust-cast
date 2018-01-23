@@ -72,7 +72,7 @@ pub enum Metadata {
 
 /// Generic media metadata.
 ///
-/// See also https://developers.google.com/cast/docs/reference/messages#GenericMediaMetadata.
+/// See also the [`GenericMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#GenericMediaMetadata).
 #[derive(Debug)]
 pub struct GenericMediaMetadata {
     /// Descriptive title of the content.
@@ -87,7 +87,7 @@ pub struct GenericMediaMetadata {
 
 /// Movie media metadata.
 ///
-/// See also https://developers.google.com/cast/docs/reference/messages#MovieMediaMetadata.
+/// See also the [`MovieMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#MovieMediaMetadata).
 #[derive(Debug)]
 pub struct MovieMediaMetadata {
     /// Title of the movie.
@@ -104,7 +104,7 @@ pub struct MovieMediaMetadata {
 
 /// TV show media metadata.
 ///
-/// See also https://developers.google.com/cast/docs/reference/messages#TvShowMediaMetadata.
+/// See also the [`TvShowMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#TvShowMediaMetadata).
 #[derive(Debug)]
 pub struct TvShowMediaMetadata {
     /// Title of the TV series.
@@ -123,7 +123,7 @@ pub struct TvShowMediaMetadata {
 
 /// Music track media metadata.
 ///
-/// See also https://developers.google.com/cast/docs/reference/messages#MusicTrackMediaMetadata.
+/// See also the [`MusicTrackMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#MusicTrackMediaMetadata).
 #[derive(Debug)]
 pub struct MusicTrackMediaMetadata {
     /// Album or collection from which the track is taken.
@@ -148,7 +148,7 @@ pub struct MusicTrackMediaMetadata {
 
 /// Photo media metadata.
 ///
-/// See also https://developers.google.com/cast/docs/reference/messages#PhotoMediaMetadata.
+/// See also the [`PhotoMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#PhotoMediaMetadata).
 #[derive(Debug)]
 pub struct PhotoMediaMetadata {
     /// Title of the photograph.
@@ -172,7 +172,7 @@ pub struct PhotoMediaMetadata {
 /// render them. The height and width are optional on only one item in an array
 /// of images.
 ///
-/// See also https://developers.google.com/cast/docs/reference/messages#Image.
+/// See also the [`Image` Cast reference](https://developers.google.com/cast/docs/reference/messages#Image).
 #[derive(Debug)]
 pub struct Image {
     /// URL of the image.
