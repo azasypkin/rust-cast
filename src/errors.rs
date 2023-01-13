@@ -48,6 +48,8 @@ pub enum Error {
     Serialization(SerializationError),
     /// This variant includes any error that comes from OpenSSL.
     Ssl(SslError),
+    /// Problems with given namespace
+    Namespace(String),
 }
 
 impl Display for Error {
@@ -58,6 +60,7 @@ impl Display for Error {
             Error::Protobuf(ref err) => Display::fmt(&err, f),
             Error::Serialization(ref err) => Display::fmt(&err, f),
             Error::Ssl(ref err) => Display::fmt(&err, f),
+            Error::Namespace(ref err) => Display::fmt(&err, f),
         }
     }
 }
@@ -70,6 +73,7 @@ impl StdError for Error {
             Error::Ssl(ref err) => Some(err),
             Error::Serialization(ref err) => Some(err),
             Error::Internal(_) => None,
+            Error::Namespace(_) => None,
         }
     }
 }

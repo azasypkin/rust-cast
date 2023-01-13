@@ -6,6 +6,8 @@ use std::{
     string::ToString,
 };
 
+use serde::Serialize;
+
 use crate::{
     cast::proxies,
     errors::Error,
@@ -251,6 +253,46 @@ where
 
             Ok(None)
         })
+    }
+
+    ///
+    /// Sends message over chromecast message bus
+    ///
+    /// Receiver can observe messages using `context.addCustomMessageListener` with custom namespace.
+    ///
+    ///```javascript, no_run
+    /// context.addCustomMessageListener('urn:x-cast:com.example.castdata', function(customEvent) {
+    /// // do something with message
+    /// });
+    ///```
+    ///
+    /// Namespace should start with `urn:x-cast:`
+    ///
+    /// # Arguments
+    ///
+    /// * `namespace` - Message namespace that should start with `urn:x-cast:`.
+    /// * `message` - Message instance to send.
+
+    pub fn broadcast_message<M: Serialize>(
+        &self,
+        namespace: &str,
+        message: &M,
+    ) -> Result<(), Error> {
+        if !namespace.starts_with("urn:x-cast:") {
+            return Err(Error::Namespace(format!(
+                "'{}' should start with 'urn:x-cast:' prefix",
+                namespace
+            )));
+        }
+        let payload = serde_json::to_string(message)?;
+        self.message_manager.send(CastMessage {
+            namespace: namespace.to_string(),
+            source: self.sender.to_string(),
+            destination: "*".into(),
+            payload: CastMessagePayload::String(payload),
+        })?;
+
+        Ok(())
     }
 
     /// Stops currently active app using corresponding `session_id`.
