@@ -189,7 +189,7 @@ fn play_media(
     media_stream_type: StreamType,
 ) {
     let app = device.receiver.launch_app(app_to_run).unwrap();
-
+    
     device
         .connection
         .connect(app.transport_id.as_str())
@@ -264,16 +264,43 @@ fn play_media(
     }
 }
 
+
+fn discover() -> Option<(String, u16)> {
+    use mdns_sd::{ServiceDaemon, ServiceEvent};
+
+    let mdns = ServiceDaemon::new().expect("Failed to create daemon");
+
+    const SERVICE_TYPE: &str = "_googlecast._tcp.local.";
+    let receiver = mdns.browse(SERVICE_TYPE).expect("Failed to browse");
+
+        while let Ok(event) = receiver.recv() {
+            match event {
+                ServiceEvent::ServiceResolved(info) => {
+                    return Some((info.get_addresses().iter().next().unwrap().clone().to_string(), info.get_port()))
+                }
+                _ => {}
+            }
+        }
+    return None
+}
+
+
 fn main() {
     env_logger::init();
 
-    let args: Args = Docopt::new(USAGE)
+    let mut args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
 
     if args.flag_address.is_none() {
-        println!("Please specify Cast Device address!");
-        std::process::exit(1);
+        if let Some(address) = discover(){
+            args.flag_address.replace(address.0);
+            args.flag_port = address.1;
+        }
+        else {
+            println!("Please specify Cast Device address. No device found!");
+            std::process::exit(1);
+        }
     }
 
     let cast_device = match CastDevice::connect_without_host_verification(
