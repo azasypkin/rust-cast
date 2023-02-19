@@ -273,14 +273,14 @@ fn discover() -> Option<(String, u16)> {
     const SERVICE_TYPE: &str = "_googlecast._tcp.local.";
     let receiver = mdns.browse(SERVICE_TYPE).expect("Failed to browse");
 
-        while let Ok(event) = receiver.recv() {
-            match event {
-                ServiceEvent::ServiceResolved(info) => {
-                    return Some((info.get_addresses().iter().next().unwrap().clone().to_string(), info.get_port()))
-                }
-                _ => {}
+    while let Ok(event) = receiver.recv() {
+        match event {
+            ServiceEvent::ServiceResolved(info) => {
+                return Some((info.get_addresses().iter().next().unwrap().clone().to_string(), info.get_port()))
             }
+            _ => {}
         }
+    }
     return None
 }
 
