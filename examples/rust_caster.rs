@@ -1,9 +1,10 @@
+use std::str::FromStr;
+
 use ansi_term::Colour::{Green, Red};
 use docopt::Docopt;
 use log::error;
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 use serde::Deserialize;
-use std::str::FromStr;
 
 use rust_cast::{
     channels::{

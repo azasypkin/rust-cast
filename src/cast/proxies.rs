@@ -286,8 +286,9 @@ pub mod media {
 
 /// Proxy classes for the `receiver` channel.
 pub mod receiver {
-    use serde::{Serialize, Deserialize};
     use std::borrow::Cow;
+
+    use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Debug)]
     pub struct AppLaunchRequest {
