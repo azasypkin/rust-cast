@@ -26,6 +26,17 @@ pub mod heartbeat {
 pub mod media {
     use serde::{Deserialize, Serialize};
 
+    #[cfg(not(feature = "json_metadata"))]
+    pub const METADATA_GENERIC: u32 = 0;
+    #[cfg(not(feature = "json_metadata"))]
+    pub const METADATA_MOVIE: u32 = 1;
+    #[cfg(not(feature = "json_metadata"))]
+    pub const METADATA_TV_SHOW: u32 = 2;
+    #[cfg(not(feature = "json_metadata"))]
+    pub const METADATA_MUSIC: u32 = 3;
+    #[cfg(not(feature = "json_metadata"))]
+    pub const METADATA_PHOTO: u32 = 4;
+
     #[derive(Serialize, Debug)]
     pub struct GetStatusRequest {
         #[serde(rename = "requestId")]
@@ -104,12 +115,17 @@ pub mod media {
         pub stream_type: String,
         #[serde(rename = "contentType")]
         pub content_type: String,
+        #[cfg(not(feature = "json_metadata"))]
         #[serde(skip_serializing_if = "Option::is_none")]
         pub metadata: Option<Metadata>,
+        #[cfg(feature = "json_metadata")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub metadata: Option<serde_json::Value>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub duration: Option<f32>,
     }
 
+    #[cfg(not(feature = "json_metadata"))]
     #[derive(Serialize, Deserialize, Debug)]
     pub struct Metadata {
         #[serde(rename = "metadataType")]
@@ -178,6 +194,7 @@ pub mod media {
         pub height: Option<u32>,
     }
 
+    #[cfg(not(feature = "json_metadata"))]
     impl Metadata {
         pub fn new(metadata_type: u32) -> Metadata {
             Metadata {
@@ -207,6 +224,7 @@ pub mod media {
         }
     }
 
+    #[cfg(not(feature = "json_metadata"))]
     #[derive(Serialize, Deserialize, Debug)]
     pub struct Image {
         pub url: String,

@@ -63,6 +63,7 @@ impl ToString for StreamType {
 }
 
 /// Generic, movie, TV show, music track, or photo metadata.
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub enum Metadata {
     Generic(GenericMediaMetadata),
@@ -75,6 +76,7 @@ pub enum Metadata {
 /// Generic media metadata.
 ///
 /// See also the [`GenericMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#GenericMediaMetadata).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct GenericMediaMetadata {
     /// Descriptive title of the content.
@@ -90,6 +92,7 @@ pub struct GenericMediaMetadata {
 /// Movie media metadata.
 ///
 /// See also the [`MovieMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#MovieMediaMetadata).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct MovieMediaMetadata {
     /// Title of the movie.
@@ -107,12 +110,13 @@ pub struct MovieMediaMetadata {
 /// TV show media metadata.
 ///
 /// See also the [`TvShowMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#TvShowMediaMetadata).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct TvShowMediaMetadata {
     /// Title of the TV series.
     pub series_title: Option<String>,
-    /// Title of the episode.
-    pub episode_title: Option<String>,
+    /// Subtitle of the TV series.
+    pub subtitle: Option<String>,
     /// Season number of the TV show.
     pub season: Option<u32>,
     /// Episode number (in the season) of the episode.
@@ -126,6 +130,7 @@ pub struct TvShowMediaMetadata {
 /// Music track media metadata.
 ///
 /// See also the [`MusicTrackMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#MusicTrackMediaMetadata).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct MusicTrackMediaMetadata {
     /// Album or collection from which the track is taken.
@@ -151,6 +156,7 @@ pub struct MusicTrackMediaMetadata {
 /// Photo media metadata.
 ///
 /// See also the [`PhotoMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#PhotoMediaMetadata).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct PhotoMediaMetadata {
     /// Title of the photograph.
@@ -175,6 +181,7 @@ pub struct PhotoMediaMetadata {
 /// of images.
 ///
 /// See also the [`Image` Cast reference](https://developers.google.com/cast/docs/reference/messages#Image).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct Image {
     /// URL of the image.
@@ -183,6 +190,7 @@ pub struct Image {
     pub dimensions: Option<(u32, u32)>,
 }
 
+#[cfg(not(feature = "json_metadata"))]
 impl Image {
     pub fn new(url: String) -> Image {
         Image {
@@ -196,6 +204,13 @@ impl Image {
             url: self.url.clone(),
             width: self.dimensions.map(|d| d.0),
             height: self.dimensions.map(|d| d.1),
+        }
+    }
+
+    fn decode(image: &proxies::media::Image) -> Self {
+        Self {
+            url: image.url.clone(),
+            dimensions: image.width.zip(image.height),
         }
     }
 }
@@ -312,8 +327,12 @@ pub struct Media {
     pub stream_type: StreamType,
     /// MIME content type of the media being played.
     pub content_type: String,
+    #[cfg(not(feature = "json_metadata"))]
     /// Generic, movie, TV show, music track, or photo metadata.
     pub metadata: Option<Metadata>,
+    #[cfg(feature = "json_metadata")]
+    /// Any valid JSON metadata
+    pub metadata: Option<serde_json::Value>,
     /// Duration of the currently playing stream in seconds.
     pub duration: Option<f32>,
 }
@@ -512,6 +531,7 @@ where
     {
         let request_id = self.message_manager.generate_request_id();
 
+        #[cfg(not(feature = "json_metadata"))]
         let metadata = media.metadata.as_ref().map(|m| match *m {
             Metadata::Generic(ref x) => proxies::media::Metadata {
                 title: x.title.clone(),
@@ -530,7 +550,7 @@ where
             },
             Metadata::TvShow(ref x) => proxies::media::Metadata {
                 series_title: x.series_title.clone(),
-                subtitle: x.episode_title.clone(),
+                subtitle: x.subtitle.clone(),
                 season: x.season,
                 episode: x.episode,
                 images: x.images.iter().map(|i| i.encode()).collect(),
@@ -561,6 +581,9 @@ where
                 ..proxies::media::Metadata::new(4)
             },
         });
+
+        #[cfg(feature = "json_metadata")]
+        let metadata = media.metadata.clone();
 
         let payload = serde_json::to_string(&proxies::media::MediaRequest {
             request_id,
@@ -826,27 +849,78 @@ where
             MESSAGE_TYPE_MEDIA_STATUS => {
                 let reply: proxies::media::StatusReply = serde_json::value::from_value(reply)?;
 
-                let statuses_entries = reply.status.iter().map(|x| {
-                    StatusEntry {
-                        media_session_id: x.media_session_id,
-                        media: x.media.as_ref().map(|m| {
-                            Media {
-                                content_id: m.content_id.to_string(),
-                                stream_type: StreamType::from_str(m.stream_type.as_ref()).unwrap(),
-                                content_type: m.content_type.to_string(),
-                                metadata: None, // TODO
-                                duration: m.duration,
+                let statuses_entries = reply.status.iter().map(|x| StatusEntry {
+                    media_session_id: x.media_session_id,
+                    media: x.media.as_ref().map(|m| Media {
+                        content_id: m.content_id.to_string(),
+                        stream_type: StreamType::from_str(m.stream_type.as_ref()).unwrap(),
+                        content_type: m.content_type.to_string(),
+                        #[cfg(not(feature = "json_metadata"))]
+                        metadata: m.metadata.as_ref().and_then(|m| match m.metadata_type {
+                            proxies::media::METADATA_GENERIC => {
+                                Some(Metadata::Generic(GenericMediaMetadata {
+                                    title: m.title.clone(),
+                                    subtitle: m.subtitle.clone(),
+                                    images: m.images.iter().map(|i| Image::decode(i)).collect(),
+                                    release_date: m.release_date.clone(),
+                                }))
                             }
+                            proxies::media::METADATA_MOVIE => {
+                                Some(Metadata::Movie(MovieMediaMetadata {
+                                    title: m.title.clone(),
+                                    subtitle: m.subtitle.clone(),
+                                    studio: m.studio.clone(),
+                                    images: m.images.iter().map(|i| Image::decode(i)).collect(),
+                                    release_date: m.release_date.clone(),
+                                }))
+                            }
+                            proxies::media::METADATA_TV_SHOW => {
+                                Some(Metadata::TvShow(TvShowMediaMetadata {
+                                    series_title: m.series_title.clone(),
+                                    subtitle: m.subtitle.clone(),
+                                    season: m.season,
+                                    episode: m.episode,
+                                    images: m.images.iter().map(|i| Image::decode(i)).collect(),
+                                    original_air_date: m.original_air_date.clone(),
+                                }))
+                            }
+                            proxies::media::METADATA_MUSIC => {
+                                Some(Metadata::MusicTrack(MusicTrackMediaMetadata {
+                                    album_name: m.album_name.clone(),
+                                    title: m.title.clone(),
+                                    album_artist: m.album_artist.clone(),
+                                    artist: m.artist.clone(),
+                                    composer: m.composer.clone(),
+                                    track_number: m.track_number,
+                                    disc_number: m.disc_number,
+                                    images: m.images.iter().map(|i| Image::decode(i)).collect(),
+                                    release_date: m.release_date.clone(),
+                                }))
+                            }
+                            proxies::media::METADATA_PHOTO => {
+                                Some(Metadata::Photo(PhotoMediaMetadata {
+                                    title: m.title.clone(),
+                                    artist: m.artist.clone(),
+                                    location: m.location.clone(),
+                                    latitude_longitude: m.latitude.zip(m.longitude),
+                                    dimensions: m.width.zip(m.height),
+                                    creation_date_time: m.creation_date_time.clone(),
+                                }))
+                            }
+                            _ => None,
                         }),
-                        playback_rate: x.playback_rate,
-                        player_state: PlayerState::from_str(x.player_state.as_ref()).unwrap(),
-                        idle_reason: x
-                            .idle_reason
-                            .as_ref()
-                            .map(|reason| IdleReason::from_str(reason).unwrap()),
-                        current_time: x.current_time,
-                        supported_media_commands: x.supported_media_commands,
-                    }
+                        #[cfg(feature = "json_metadata")]
+                        metadata: m.metadata.clone(),
+                        duration: m.duration,
+                    }),
+                    playback_rate: x.playback_rate,
+                    player_state: PlayerState::from_str(x.player_state.as_ref()).unwrap(),
+                    idle_reason: x
+                        .idle_reason
+                        .as_ref()
+                        .map(|reason| IdleReason::from_str(reason).unwrap()),
+                    current_time: x.current_time,
+                    supported_media_commands: x.supported_media_commands,
                 });
 
                 MediaResponse::Status(Status {

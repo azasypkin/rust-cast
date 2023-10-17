@@ -36,3 +36,4 @@ protobuf-codegen = "=3.2.0"
 
 [features]
 thread_safe = []
+json_metadata = []
