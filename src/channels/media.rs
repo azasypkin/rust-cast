@@ -63,6 +63,7 @@ impl ToString for StreamType {
 }
 
 /// Generic, movie, TV show, music track, or photo metadata.
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub enum Metadata {
     Generic(GenericMediaMetadata),
@@ -75,6 +76,7 @@ pub enum Metadata {
 /// Generic media metadata.
 ///
 /// See also the [`GenericMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#GenericMediaMetadata).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct GenericMediaMetadata {
     /// Descriptive title of the content.
@@ -90,6 +92,7 @@ pub struct GenericMediaMetadata {
 /// Movie media metadata.
 ///
 /// See also the [`MovieMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#MovieMediaMetadata).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct MovieMediaMetadata {
     /// Title of the movie.
@@ -107,6 +110,7 @@ pub struct MovieMediaMetadata {
 /// TV show media metadata.
 ///
 /// See also the [`TvShowMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#TvShowMediaMetadata).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct TvShowMediaMetadata {
     /// Title of the TV series.
@@ -126,6 +130,7 @@ pub struct TvShowMediaMetadata {
 /// Music track media metadata.
 ///
 /// See also the [`MusicTrackMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#MusicTrackMediaMetadata).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct MusicTrackMediaMetadata {
     /// Album or collection from which the track is taken.
@@ -151,6 +156,7 @@ pub struct MusicTrackMediaMetadata {
 /// Photo media metadata.
 ///
 /// See also the [`PhotoMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#PhotoMediaMetadata).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct PhotoMediaMetadata {
     /// Title of the photograph.
@@ -175,6 +181,7 @@ pub struct PhotoMediaMetadata {
 /// of images.
 ///
 /// See also the [`Image` Cast reference](https://developers.google.com/cast/docs/reference/messages#Image).
+#[cfg(not(feature = "json_metadata"))]
 #[derive(Clone, Debug)]
 pub struct Image {
     /// URL of the image.
@@ -183,6 +190,7 @@ pub struct Image {
     pub dimensions: Option<(u32, u32)>,
 }
 
+#[cfg(not(feature = "json_metadata"))]
 impl Image {
     pub fn new(url: String) -> Image {
         Image {
@@ -312,8 +320,12 @@ pub struct Media {
     pub stream_type: StreamType,
     /// MIME content type of the media being played.
     pub content_type: String,
+    #[cfg(not(feature = "json_metadata"))]
     /// Generic, movie, TV show, music track, or photo metadata.
     pub metadata: Option<Metadata>,
+    #[cfg(feature = "json_metadata")]
+    /// Any valid JSON metadata
+    pub metadata: Option<serde_json::Value>,
     /// Duration of the currently playing stream in seconds.
     pub duration: Option<f32>,
 }
@@ -512,6 +524,7 @@ where
     {
         let request_id = self.message_manager.generate_request_id();
 
+        #[cfg(not(feature = "json_metadata"))]
         let metadata = media.metadata.as_ref().map(|m| match *m {
             Metadata::Generic(ref x) => proxies::media::Metadata {
                 title: x.title.clone(),
@@ -561,6 +574,9 @@ where
                 ..proxies::media::Metadata::new(4)
             },
         });
+
+        #[cfg(feature = "json_metadata")]
+        let metadata = media.metadata.clone();
 
         let payload = serde_json::to_string(&proxies::media::MediaRequest {
             request_id,
