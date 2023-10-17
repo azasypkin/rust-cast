@@ -26,6 +26,17 @@ pub mod heartbeat {
 pub mod media {
     use serde::{Deserialize, Serialize};
 
+    #[cfg(not(feature = "json_metadata"))]
+    pub const METADATA_GENERIC: u32 = 0;
+    #[cfg(not(feature = "json_metadata"))]
+    pub const METADATA_MOVIE: u32 = 1;
+    #[cfg(not(feature = "json_metadata"))]
+    pub const METADATA_TV_SHOW: u32 = 2;
+    #[cfg(not(feature = "json_metadata"))]
+    pub const METADATA_MUSIC: u32 = 3;
+    #[cfg(not(feature = "json_metadata"))]
+    pub const METADATA_PHOTO: u32 = 4;
+
     #[derive(Serialize, Debug)]
     pub struct GetStatusRequest {
         #[serde(rename = "requestId")]

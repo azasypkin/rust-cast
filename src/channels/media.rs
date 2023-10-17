@@ -115,8 +115,8 @@ pub struct MovieMediaMetadata {
 pub struct TvShowMediaMetadata {
     /// Title of the TV series.
     pub series_title: Option<String>,
-    /// Title of the episode.
-    pub episode_title: Option<String>,
+    /// Subtitle of the TV series.
+    pub subtitle: Option<String>,
     /// Season number of the TV show.
     pub season: Option<u32>,
     /// Episode number (in the season) of the episode.
@@ -204,6 +204,13 @@ impl Image {
             url: self.url.clone(),
             width: self.dimensions.map(|d| d.0),
             height: self.dimensions.map(|d| d.1),
+        }
+    }
+
+    fn decode(image: &proxies::media::Image) -> Self {
+        Self {
+            url: image.url.clone(),
+            dimensions: image.width.zip(image.height),
         }
     }
 }
@@ -543,7 +550,7 @@ where
             },
             Metadata::TvShow(ref x) => proxies::media::Metadata {
                 series_title: x.series_title.clone(),
-                subtitle: x.episode_title.clone(),
+                subtitle: x.subtitle.clone(),
                 season: x.season,
                 episode: x.episode,
                 images: x.images.iter().map(|i| i.encode()).collect(),
@@ -842,27 +849,78 @@ where
             MESSAGE_TYPE_MEDIA_STATUS => {
                 let reply: proxies::media::StatusReply = serde_json::value::from_value(reply)?;
 
-                let statuses_entries = reply.status.iter().map(|x| {
-                    StatusEntry {
-                        media_session_id: x.media_session_id,
-                        media: x.media.as_ref().map(|m| {
-                            Media {
-                                content_id: m.content_id.to_string(),
-                                stream_type: StreamType::from_str(m.stream_type.as_ref()).unwrap(),
-                                content_type: m.content_type.to_string(),
-                                metadata: None, // TODO
-                                duration: m.duration,
+                let statuses_entries = reply.status.iter().map(|x| StatusEntry {
+                    media_session_id: x.media_session_id,
+                    media: x.media.as_ref().map(|m| Media {
+                        content_id: m.content_id.to_string(),
+                        stream_type: StreamType::from_str(m.stream_type.as_ref()).unwrap(),
+                        content_type: m.content_type.to_string(),
+                        #[cfg(not(feature = "json_metadata"))]
+                        metadata: m.metadata.as_ref().and_then(|m| match m.metadata_type {
+                            proxies::media::METADATA_GENERIC => {
+                                Some(Metadata::Generic(GenericMediaMetadata {
+                                    title: m.title.clone(),
+                                    subtitle: m.subtitle.clone(),
+                                    images: m.images.iter().map(|i| Image::decode(i)).collect(),
+                                    release_date: m.release_date.clone(),
+                                }))
                             }
+                            proxies::media::METADATA_MOVIE => {
+                                Some(Metadata::Movie(MovieMediaMetadata {
+                                    title: m.title.clone(),
+                                    subtitle: m.subtitle.clone(),
+                                    studio: m.studio.clone(),
+                                    images: m.images.iter().map(|i| Image::decode(i)).collect(),
+                                    release_date: m.release_date.clone(),
+                                }))
+                            }
+                            proxies::media::METADATA_TV_SHOW => {
+                                Some(Metadata::TvShow(TvShowMediaMetadata {
+                                    series_title: m.series_title.clone(),
+                                    subtitle: m.subtitle.clone(),
+                                    season: m.season,
+                                    episode: m.episode,
+                                    images: m.images.iter().map(|i| Image::decode(i)).collect(),
+                                    original_air_date: m.original_air_date.clone(),
+                                }))
+                            }
+                            proxies::media::METADATA_MUSIC => {
+                                Some(Metadata::MusicTrack(MusicTrackMediaMetadata {
+                                    album_name: m.album_name.clone(),
+                                    title: m.title.clone(),
+                                    album_artist: m.album_artist.clone(),
+                                    artist: m.artist.clone(),
+                                    composer: m.composer.clone(),
+                                    track_number: m.track_number,
+                                    disc_number: m.disc_number,
+                                    images: m.images.iter().map(|i| Image::decode(i)).collect(),
+                                    release_date: m.release_date.clone(),
+                                }))
+                            }
+                            proxies::media::METADATA_PHOTO => {
+                                Some(Metadata::Photo(PhotoMediaMetadata {
+                                    title: m.title.clone(),
+                                    artist: m.artist.clone(),
+                                    location: m.location.clone(),
+                                    latitude_longitude: m.latitude.zip(m.longitude),
+                                    dimensions: m.width.zip(m.height),
+                                    creation_date_time: m.creation_date_time.clone(),
+                                }))
+                            }
+                            _ => None,
                         }),
-                        playback_rate: x.playback_rate,
-                        player_state: PlayerState::from_str(x.player_state.as_ref()).unwrap(),
-                        idle_reason: x
-                            .idle_reason
-                            .as_ref()
-                            .map(|reason| IdleReason::from_str(reason).unwrap()),
-                        current_time: x.current_time,
-                        supported_media_commands: x.supported_media_commands,
-                    }
+                        #[cfg(feature = "json_metadata")]
+                        metadata: m.metadata.clone(),
+                        duration: m.duration,
+                    }),
+                    playback_rate: x.playback_rate,
+                    player_state: PlayerState::from_str(x.player_state.as_ref()).unwrap(),
+                    idle_reason: x
+                        .idle_reason
+                        .as_ref()
+                        .map(|reason| IdleReason::from_str(reason).unwrap()),
+                    current_time: x.current_time,
+                    supported_media_commands: x.supported_media_commands,
                 });
 
                 MediaResponse::Status(Status {
