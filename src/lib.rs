@@ -6,9 +6,7 @@ pub mod errors;
 pub mod message_manager;
 mod utils;
 
-use std::{borrow::Cow, net::TcpStream};
-
-use openssl::ssl::{SslConnector, SslMethod, SslStream, SslVerifyMode};
+use std::{borrow::Cow, net::TcpStream, sync::Arc};
 
 use channels::{
     connection::{ConnectionChannel, ConnectionResponse},
@@ -16,10 +14,14 @@ use channels::{
     media::{MediaChannel, MediaResponse},
     receiver::{ReceiverChannel, ReceiverResponse},
 };
-
 use errors::Error;
-
 use message_manager::{CastMessage, MessageManager};
+
+use rustls::client::danger::HandshakeSignatureValid;
+use rustls::crypto::{verify_tls12_signature, verify_tls13_signature};
+use rustls::pki_types::ServerName;
+use rustls::DigitallySignedStruct;
+use rustls::{ClientConnection, StreamOwned};
 
 const DEFAULT_SENDER_ID: &str = "sender-0";
 const DEFAULT_RECEIVER_ID: &str = "receiver-0";
@@ -47,19 +49,19 @@ pub enum ChannelMessage {
 
 /// Structure that manages connection to a cast device.
 pub struct CastDevice<'a> {
-    message_manager: Lrc<MessageManager<SslStream<TcpStream>>>,
+    message_manager: Lrc<MessageManager<StreamOwned<ClientConnection, TcpStream>>>,
 
     /// Channel that manages connection responses/requests.
-    pub connection: ConnectionChannel<'a, SslStream<TcpStream>>,
+    pub connection: ConnectionChannel<'a, StreamOwned<ClientConnection, TcpStream>>,
 
     /// Channel that allows connection to stay alive (via ping-pong requests/responses).
-    pub heartbeat: HeartbeatChannel<'a, SslStream<TcpStream>>,
+    pub heartbeat: HeartbeatChannel<'a, StreamOwned<ClientConnection, TcpStream>>,
 
     /// Channel that manages various media stuff.
-    pub media: MediaChannel<'a, SslStream<TcpStream>>,
+    pub media: MediaChannel<'a, StreamOwned<ClientConnection, TcpStream>>,
 
     /// Channel that manages receiving platform (e.g. Chromecast).
-    pub receiver: ReceiverChannel<'a, SslStream<TcpStream>>,
+    pub receiver: ReceiverChannel<'a, StreamOwned<ClientConnection, TcpStream>>,
 }
 
 impl<'a> CastDevice<'a> {
@@ -99,10 +101,28 @@ impl<'a> CastDevice<'a> {
             port
         );
 
-        let connector = SslConnector::builder(SslMethod::tls())?.build();
-        let tcp_stream = TcpStream::connect((host.as_ref(), port))?;
+        let mut root_store = rustls::RootCertStore::empty();
+        for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs")
+        {
+            root_store.add(cert).unwrap();
+        }
 
-        CastDevice::connect_to_device(connector.connect(host.as_ref(), tcp_stream)?)
+        let config: rustls::ClientConfig = rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+
+        let server_name = ServerName::try_from(host.as_ref())?.to_owned();
+        let conn = rustls::ClientConnection::new(config.into(), server_name)?;
+        let sock = TcpStream::connect((host.as_ref(), port))?;
+        let stream = rustls::StreamOwned::new(conn, sock);
+
+        log::debug!(
+            "Connection with {}:{} successfully established.",
+            host,
+            port
+        );
+
+        CastDevice::connect_to_device(stream)
     }
 
     /// Connects to the cast device using host name and port _without_ host verification. Use on
@@ -142,11 +162,15 @@ impl<'a> CastDevice<'a> {
             port
         );
 
-        let mut builder = SslConnector::builder(SslMethod::tls())?;
-        builder.set_verify(SslVerifyMode::NONE);
+        let config = rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoCertificateVerification {}))
+            .with_no_client_auth();
 
-        let connector = builder.build();
-        let tcp_stream = TcpStream::connect((host.as_ref(), port))?;
+        let server_name = ServerName::try_from(host.as_ref())?.to_owned();
+        let conn = rustls::ClientConnection::new(Arc::new(config.into()), server_name)?;
+        let sock = TcpStream::connect((host.as_ref(), port))?;
+        let stream = rustls::StreamOwned::new(conn, sock);
 
         log::debug!(
             "Connection with {}:{} successfully established.",
@@ -154,7 +178,7 @@ impl<'a> CastDevice<'a> {
             port
         );
 
-        CastDevice::connect_to_device(connector.connect(host.as_ref(), tcp_stream)?)
+        CastDevice::connect_to_device(stream)
     }
 
     /// Waits for any message returned by cast device (e.g. Chromecast) and returns its parsed
@@ -221,7 +245,9 @@ impl<'a> CastDevice<'a> {
     /// # Return value
     ///
     /// Instance of `CastDevice` that allows you to manage connection.
-    fn connect_to_device(ssl_stream: SslStream<TcpStream>) -> Result<CastDevice<'a>, Error> {
+    fn connect_to_device(
+        ssl_stream: StreamOwned<ClientConnection, TcpStream>,
+    ) -> Result<CastDevice<'a>, Error> {
         let message_manager_rc = Lrc::new(MessageManager::new(ssl_stream));
 
         let heartbeat = HeartbeatChannel::new(
@@ -259,5 +285,55 @@ pub(crate) mod tests {
 
         is_sync::<CastDevice>();
         is_send::<CastDevice>();
+    }
+}
+
+#[derive(Debug)]
+pub struct NoCertificateVerification {}
+
+impl rustls::client::danger::ServerCertVerifier for NoCertificateVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
+        _ocsp: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        rustls::crypto::ring::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
     }
 }

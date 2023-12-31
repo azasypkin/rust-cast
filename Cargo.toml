@@ -20,8 +20,9 @@ exclude = [
 [dependencies]
 byteorder = "1.4.3"
 log = "0.4.17"
-openssl = "0.10.45"
 protobuf = "=3.2.0"
+rustls = "0.22.1"
+rustls-native-certs = "0.7.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.93"
 
