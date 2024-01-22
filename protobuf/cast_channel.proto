@@ -1,15 +1,15 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 syntax = "proto2";
 
 option optimize_for = LITE_RUNTIME;
+
 // TODO(crbug.com/openscreen/90): Rename to openscreen.cast, to update to the
 // current namespacing of the library. Also, this file should probably be moved
 // to the public directory. And, all of this will have to be coordinated with a
 // DEPS roll in Chromium (since Chromium code depends on this).
-
 package cast.channel;
 
 message CastMessage {
@@ -58,11 +58,14 @@ message CastMessage {
   // will always be set.
   optional string payload_utf8 = 6;
   optional bytes payload_binary = 7;
+
   // --- Begin new 1.1 fields.
+
   // Flag indicating whether there are more chunks to follow for this message.
   // If the flag is false or is not present, then this is the last (or only)
   // chunk of the message.
   optional bool continued = 8;
+
   // If this is a chunk of a larger message, and the remaining length of the
   // message payload (the sum of the lengths of the payloads of the remaining
   // chunks) is known, this field will indicate that length. For a given

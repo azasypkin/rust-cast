@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@ option optimize_for = LITE_RUNTIME;
 // current namespacing of the library. Also, this file should probably be moved
 // to the public directory. And, all of this will have to be coordinated with a
 // DEPS roll in Chromium (since Chromium code depends on this).
-
 package cast.channel;
 
 message AuthorityKeys {
