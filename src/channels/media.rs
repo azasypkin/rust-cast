@@ -1,9 +1,6 @@
-use std::{
-    borrow::Cow,
-    io::{Read, Write},
-    str::FromStr,
-    string::ToString,
-};
+use std::{borrow::Cow, str::FromStr, string::ToString};
+
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     cast::proxies,
@@ -772,7 +769,7 @@ pub enum MediaResponse {
 
 pub struct MediaChannel<'a, W>
 where
-    W: Read + Write,
+    W: AsyncRead + AsyncWrite,
 {
     sender: Cow<'a, str>,
     message_manager: Lrc<MessageManager<W>>,
@@ -780,7 +777,7 @@ where
 
 impl<'a, W> MediaChannel<'a, W>
 where
-    W: Read + Write,
+    W: AsyncRead + AsyncWrite,
 {
     pub fn new<S>(sender: S, message_manager: Lrc<MessageManager<W>>) -> MediaChannel<'a, W>
     where
@@ -803,7 +800,7 @@ where
     /// # Return value
     ///
     /// Returned `Result` should consist of either `Status` instance or an `Error`.
-    pub fn get_status<S>(
+    pub async fn get_status<S>(
         &self,
         destination: S,
         media_session_id: Option<i32>,
@@ -819,37 +816,41 @@ where
             media_session_id,
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: destination.into().to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: destination.into().to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
-        self.message_manager.receive_find_map(|message| {
-            if !self.can_handle(message) {
-                return Ok(None);
-            }
-
-            match self.parse(message)? {
-                MediaResponse::Status(status) => {
-                    if status.request_id == request_id {
-                        return Ok(Some(status));
-                    }
+        self.message_manager
+            .receive_find_map(|message| {
+                if !self.can_handle(message) {
+                    return Ok(None);
                 }
-                MediaResponse::InvalidRequest(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(format!(
-                            "Invalid request ({}).",
-                            error.reason.unwrap_or_else(|| "Unknown".to_string())
-                        )));
-                    }
-                }
-                _ => {}
-            }
 
-            Ok(None)
-        })
+                match self.parse(message)? {
+                    MediaResponse::Status(status) => {
+                        if status.request_id == request_id {
+                            return Ok(Some(status));
+                        }
+                    }
+                    MediaResponse::InvalidRequest(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(format!(
+                                "Invalid request ({}).",
+                                error.reason.unwrap_or_else(|| "Unknown".to_string())
+                            )));
+                        }
+                    }
+                    _ => {}
+                }
+
+                Ok(None)
+            })
+            .await
     }
 
     /// Loads provided media to the application.
@@ -862,11 +863,17 @@ where
     /// # Return value
     ///
     /// Returned `Result` should consist of either `Status` instance or an `Error`.
-    pub fn load<S>(&self, destination: S, session_id: S, media: &Media) -> Result<Status, Error>
+    pub async fn load<S>(
+        &self,
+        destination: S,
+        session_id: S,
+        media: &Media,
+    ) -> Result<Status, Error>
     where
         S: Into<Cow<'a, str>>,
     {
         self.load_with_queue(destination, session_id, media, None)
+            .await
     }
 
     /// Loads provided media to the application.
@@ -879,7 +886,7 @@ where
     /// # Return value
     ///
     /// Returned `Result` should consist of either `Status` instance or an `Error`.
-    pub fn load_with_queue<S>(
+    pub async fn load_with_queue<S>(
         &self,
         destination: S,
         session_id: S,
@@ -904,78 +911,82 @@ where
             queue_data: queue.map(|qd| qd.encode()),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: destination.into().to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: destination.into().to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
         // Once media is loaded cast receiver device should emit status update event, or load failed
         // event if something went wrong.
-        self.message_manager.receive_find_map(|message| {
-            if !self.can_handle(message) {
-                return Ok(None);
-            }
-
-            match self.parse(message)? {
-                MediaResponse::Status(status) => {
-                    if status.request_id == request_id {
-                        return Ok(Some(status));
-                    }
-
-                    // [WORKAROUND] In some cases we don't receive response (e.g. from YouTube app),
-                    // so let's just wait for the response with the media we're interested in and
-                    // return it.
-                    let has_media = {
-                        status.entries.iter().any(|entry| {
-                            if let Some(ref loaded_media) = entry.media {
-                                return loaded_media.content_id == media.content_id;
-                            }
-
-                            false
-                        })
-                    };
-
-                    if has_media {
-                        return Ok(Some(status));
-                    }
+        self.message_manager
+            .receive_find_map(|message| {
+                if !self.can_handle(message) {
+                    return Ok(None);
                 }
-                MediaResponse::LoadFailed(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal("Failed to load media.".to_string()));
-                    }
-                }
-                MediaResponse::LoadCancelled(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(
-                            "Load cancelled by another request.".to_string(),
-                        ));
-                    }
-                }
-                MediaResponse::InvalidPlayerState(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(
-                            "Load failed because of invalid player state.".to_string(),
-                        ));
-                    }
-                }
-                MediaResponse::InvalidRequest(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(format!(
-                            "Load failed because of invalid media request (reason: {}).",
-                            error.reason.unwrap_or_else(|| "UNKNOWN".to_string())
-                        )));
-                    }
-                }
-                _ => {}
-            }
 
-            Ok(None)
-        })
+                match self.parse(message)? {
+                    MediaResponse::Status(status) => {
+                        if status.request_id == request_id {
+                            return Ok(Some(status));
+                        }
+
+                        // [WORKAROUND] In some cases we don't receive response (e.g. from YouTube app),
+                        // so let's just wait for the response with the media we're interested in and
+                        // return it.
+                        let has_media = {
+                            status.entries.iter().any(|entry| {
+                                if let Some(ref loaded_media) = entry.media {
+                                    return loaded_media.content_id == media.content_id;
+                                }
+
+                                false
+                            })
+                        };
+
+                        if has_media {
+                            return Ok(Some(status));
+                        }
+                    }
+                    MediaResponse::LoadFailed(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal("Failed to load media.".to_string()));
+                        }
+                    }
+                    MediaResponse::LoadCancelled(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(
+                                "Load cancelled by another request.".to_string(),
+                            ));
+                        }
+                    }
+                    MediaResponse::InvalidPlayerState(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(
+                                "Load failed because of invalid player state.".to_string(),
+                            ));
+                        }
+                    }
+                    MediaResponse::InvalidRequest(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(format!(
+                                "Load failed because of invalid media request (reason: {}).",
+                                error.reason.unwrap_or_else(|| "UNKNOWN".to_string())
+                            )));
+                        }
+                    }
+                    _ => {}
+                }
+
+                Ok(None)
+            })
+            .await
     }
 
-    pub fn load_queue<S>(
+    pub async fn load_queue<S>(
         &self,
         destination: S,
         _session_id: S,
@@ -996,58 +1007,62 @@ where
             start_index: queue.start_index,
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: destination.into().to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: destination.into().to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
         // Once media is loaded cast receiver device should emit status update event, or load failed
         // event if something went wrong.
-        self.message_manager.receive_find_map(|message| {
-            if !self.can_handle(message) {
-                return Ok(None);
-            }
+        self.message_manager
+            .receive_find_map(|message| {
+                if !self.can_handle(message) {
+                    return Ok(None);
+                }
 
-            match self.parse(message)? {
-                MediaResponse::Status(status) => {
-                    if status.request_id == request_id {
-                        return Ok(Some(status));
+                match self.parse(message)? {
+                    MediaResponse::Status(status) => {
+                        if status.request_id == request_id {
+                            return Ok(Some(status));
+                        }
                     }
-                }
-                MediaResponse::LoadFailed(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal("Failed to load media.".to_string()));
+                    MediaResponse::LoadFailed(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal("Failed to load media.".to_string()));
+                        }
                     }
-                }
-                MediaResponse::LoadCancelled(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(
-                            "Load cancelled by another request.".to_string(),
-                        ));
+                    MediaResponse::LoadCancelled(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(
+                                "Load cancelled by another request.".to_string(),
+                            ));
+                        }
                     }
-                }
-                MediaResponse::InvalidPlayerState(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(
-                            "Load failed because of invalid player state.".to_string(),
-                        ));
+                    MediaResponse::InvalidPlayerState(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(
+                                "Load failed because of invalid player state.".to_string(),
+                            ));
+                        }
                     }
-                }
-                MediaResponse::InvalidRequest(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(format!(
-                            "Load failed because of invalid media request (reason: {}).",
-                            error.reason.unwrap_or_else(|| "UNKNOWN".to_string())
-                        )));
+                    MediaResponse::InvalidRequest(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(format!(
+                                "Load failed because of invalid media request (reason: {}).",
+                                error.reason.unwrap_or_else(|| "UNKNOWN".to_string())
+                            )));
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
-            }
 
-            Ok(None)
-        })
+                Ok(None)
+            })
+            .await
     }
 
     /// Pauses playback of the current content. Triggers a STATUS event notification to all sender
@@ -1061,7 +1076,11 @@ where
     /// # Return value
     ///
     /// Returned `Result` should consist of either `Status` instance or an `Error`.
-    pub fn pause<S>(&self, destination: S, media_session_id: i32) -> Result<StatusEntry, Error>
+    pub async fn pause<S>(
+        &self,
+        destination: S,
+        media_session_id: i32,
+    ) -> Result<StatusEntry, Error>
     where
         S: Into<Cow<'a, str>>,
     {
@@ -1074,14 +1093,17 @@ where
             custom_data: proxies::media::CustomData::new(),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: destination.into().to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: destination.into().to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
         self.receive_status_entry(request_id, media_session_id)
+            .await
     }
 
     /// Begins playback of the content that was loaded with the load call, playback is continued
@@ -1095,7 +1117,7 @@ where
     /// # Return value
     ///
     /// Returned `Result` should consist of either `Status` instance or an `Error`.
-    pub fn play<S>(&self, destination: S, media_session_id: i32) -> Result<StatusEntry, Error>
+    pub async fn play<S>(&self, destination: S, media_session_id: i32) -> Result<StatusEntry, Error>
     where
         S: Into<Cow<'a, str>>,
     {
@@ -1108,14 +1130,17 @@ where
             custom_data: proxies::media::CustomData::new(),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: destination.into().to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: destination.into().to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
         self.receive_status_entry(request_id, media_session_id)
+            .await
     }
 
     /// Stops playback of the current content. Triggers a STATUS event notification to all sender
@@ -1130,7 +1155,7 @@ where
     /// # Return value
     ///
     /// Returned `Result` should consist of either `Status` instance or an `Error`.
-    pub fn stop<S>(&self, destination: S, media_session_id: i32) -> Result<StatusEntry, Error>
+    pub async fn stop<S>(&self, destination: S, media_session_id: i32) -> Result<StatusEntry, Error>
     where
         S: Into<Cow<'a, str>>,
     {
@@ -1143,14 +1168,17 @@ where
             custom_data: proxies::media::CustomData::new(),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: destination.into().to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: destination.into().to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
         self.receive_status_entry(request_id, media_session_id)
+            .await
     }
 
     /// Sets the current position in the stream. Triggers a STATUS event notification to all sender
@@ -1167,7 +1195,7 @@ where
     /// # Return value
     ///
     /// Returned `Result` should consist of either `Status` instance or an `Error`.
-    pub fn seek<S>(
+    pub async fn seek<S>(
         &self,
         destination: S,
         media_session_id: i32,
@@ -1188,14 +1216,17 @@ where
             custom_data: proxies::media::CustomData::new(),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: destination.into().to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: destination.into().to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
         self.receive_status_entry(request_id, media_session_id)
+            .await
     }
 
     pub fn can_handle(&self, message: &CastMessage) -> bool {
@@ -1285,46 +1316,48 @@ where
     /// # Return value
     ///
     /// Returned `Result` should consist of either `Status` instance or an `Error`.
-    fn receive_status_entry(
+    async fn receive_status_entry(
         &self,
         request_id: u32,
         media_session_id: i32,
     ) -> Result<StatusEntry, Error> {
-        self.message_manager.receive_find_map(|message| {
-            if !self.can_handle(message) {
-                return Ok(None);
-            }
-
-            match self.parse(message)? {
-                MediaResponse::Status(mut status) => {
-                    if status.request_id == request_id {
-                        let position = status
-                            .entries
-                            .iter()
-                            .position(|e| e.media_session_id == media_session_id);
-
-                        return Ok(position.map(|position| status.entries.remove(position)));
-                    }
+        self.message_manager
+            .receive_find_map(|message| {
+                if !self.can_handle(message) {
+                    return Ok(None);
                 }
-                MediaResponse::InvalidPlayerState(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(
-                            "Request failed because of invalid player state.".to_string(),
-                        ));
-                    }
-                }
-                MediaResponse::InvalidRequest(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(format!(
-                            "Invalid request ({}).",
-                            error.reason.unwrap_or_else(|| "Unknown".to_string())
-                        )));
-                    }
-                }
-                _ => {}
-            }
 
-            Ok(None)
-        })
+                match self.parse(message)? {
+                    MediaResponse::Status(mut status) => {
+                        if status.request_id == request_id {
+                            let position = status
+                                .entries
+                                .iter()
+                                .position(|e| e.media_session_id == media_session_id);
+
+                            return Ok(position.map(|position| status.entries.remove(position)));
+                        }
+                    }
+                    MediaResponse::InvalidPlayerState(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(
+                                "Request failed because of invalid player state.".to_string(),
+                            ));
+                        }
+                    }
+                    MediaResponse::InvalidRequest(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(format!(
+                                "Invalid request ({}).",
+                                error.reason.unwrap_or_else(|| "Unknown".to_string())
+                            )));
+                        }
+                    }
+                    _ => {}
+                }
+
+                Ok(None)
+            })
+            .await
     }
 }

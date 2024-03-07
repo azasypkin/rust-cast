@@ -4,9 +4,8 @@ mod cast;
 pub mod channels;
 pub mod errors;
 pub mod message_manager;
-mod utils;
 
-use std::{borrow::Cow, net::TcpStream, sync::Arc};
+use std::{borrow::Cow, sync::Arc};
 
 use channels::{
     connection::{ConnectionChannel, ConnectionResponse},
@@ -21,8 +20,10 @@ use rustls::{
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     crypto::{aws_lc_rs::default_provider, verify_tls12_signature, verify_tls13_signature},
     pki_types::{CertificateDer, ServerName, UnixTime},
-    ClientConfig, ClientConnection, DigitallySignedStruct, RootCertStore, StreamOwned,
+    ClientConfig, DigitallySignedStruct, RootCertStore,
 };
+use tokio::net::TcpStream;
+use tokio_rustls::client::TlsStream;
 
 const DEFAULT_SENDER_ID: &str = "sender-0";
 const DEFAULT_RECEIVER_ID: &str = "receiver-0";
@@ -50,19 +51,19 @@ pub enum ChannelMessage {
 
 /// Structure that manages connection to a cast device.
 pub struct CastDevice<'a> {
-    message_manager: Lrc<MessageManager<StreamOwned<ClientConnection, TcpStream>>>,
+    message_manager: Lrc<MessageManager<TlsStream<TcpStream>>>,
 
     /// Channel that manages connection responses/requests.
-    pub connection: ConnectionChannel<'a, StreamOwned<ClientConnection, TcpStream>>,
+    pub connection: ConnectionChannel<'a, TlsStream<TcpStream>>,
 
     /// Channel that allows connection to stay alive (via ping-pong requests/responses).
-    pub heartbeat: HeartbeatChannel<'a, StreamOwned<ClientConnection, TcpStream>>,
+    pub heartbeat: HeartbeatChannel<'a, TlsStream<TcpStream>>,
 
     /// Channel that manages various media stuff.
-    pub media: MediaChannel<'a, StreamOwned<ClientConnection, TcpStream>>,
+    pub media: MediaChannel<'a, TlsStream<TcpStream>>,
 
     /// Channel that manages receiving platform (e.g. Chromecast).
-    pub receiver: ReceiverChannel<'a, StreamOwned<ClientConnection, TcpStream>>,
+    pub receiver: ReceiverChannel<'a, TlsStream<TcpStream>>,
 }
 
 impl<'a> CastDevice<'a> {
@@ -73,8 +74,10 @@ impl<'a> CastDevice<'a> {
     /// ```no_run
     /// use rust_cast::CastDevice;
     ///
-    /// let device = CastDevice::connect("192.168.1.2", 8009)?;
+    /// # tokio_test::block_on(async {
+    /// let device = CastDevice::connect("192.168.1.2", 8009).await?;
     /// # Ok::<(), rust_cast::errors::Error>(())
+    /// # });
     /// ```
     ///
     /// # Arguments
@@ -90,7 +93,7 @@ impl<'a> CastDevice<'a> {
     /// # Return value
     ///
     /// Instance of `CastDevice` that allows you to manage connection.
-    pub fn connect<S>(host: S, port: u16) -> Result<CastDevice<'a>, Error>
+    pub async fn connect<S>(host: S, port: u16) -> Result<CastDevice<'a>, Error>
     where
         S: Into<Cow<'a, str>>,
     {
@@ -114,12 +117,14 @@ impl<'a> CastDevice<'a> {
             .with_root_certificates(root_store)
             .with_no_client_auth();
         config.key_log = Arc::new(rustls::KeyLogFile::new());
+        let connor = tokio_rustls::TlsConnector::from(Arc::new(config));
 
-        let conn = ClientConnection::new(
-            config.into(),
-            ServerName::try_from(host.as_ref())?.to_owned(),
-        )?;
-        let stream = StreamOwned::new(conn, TcpStream::connect((host.as_ref(), port))?);
+        let stream = connor
+            .connect(
+                ServerName::try_from(host.as_ref())?.to_owned(),
+                TcpStream::connect((host.as_ref(), port)).await?,
+            )
+            .await?;
 
         log::debug!("Connection with {host}:{port} successfully established.");
 
@@ -134,8 +139,10 @@ impl<'a> CastDevice<'a> {
     /// ```no_run
     /// use rust_cast::CastDevice;
     ///
-    /// let device = CastDevice::connect_without_host_verification("192.168.1.2", 8009)?;
+    /// # tokio_test::block_on(async {
+    /// let device = CastDevice::connect_without_host_verification("192.168.1.2", 8009).await?;
     /// # Ok::<(), rust_cast::errors::Error>(())
+    /// # });
     /// ```
     ///
     /// # Arguments
@@ -151,7 +158,10 @@ impl<'a> CastDevice<'a> {
     /// # Return value
     ///
     /// Instance of `CastDevice` that allows you to manage connection.
-    pub fn connect_without_host_verification<S>(host: S, port: u16) -> Result<CastDevice<'a>, Error>
+    pub async fn connect_without_host_verification<S>(
+        host: S,
+        port: u16,
+    ) -> Result<CastDevice<'a>, Error>
     where
         S: Into<Cow<'a, str>>,
     {
@@ -164,14 +174,14 @@ impl<'a> CastDevice<'a> {
             .with_custom_certificate_verifier(Arc::new(NoCertificateVerification {}))
             .with_no_client_auth();
         config.key_log = Arc::new(rustls::KeyLogFile::new());
-        let stream = StreamOwned::new(
-            ClientConnection::new(
-                Arc::new(config),
-                ServerName::try_from(host.as_ref())?.to_owned(),
-            )?,
-            TcpStream::connect((host.as_ref(), port))?,
-        );
+        let connor = tokio_rustls::TlsConnector::from(Arc::new(config));
 
+        let stream = connor
+            .connect(
+                ServerName::try_from(host.as_ref())?.to_owned(),
+                TcpStream::connect((host.as_ref(), port)).await?,
+            )
+            .await?;
         log::debug!("Connection with {host}:{port} successfully established.");
 
         CastDevice::connect_to_device(stream)
@@ -186,15 +196,17 @@ impl<'a> CastDevice<'a> {
     /// use rust_cast::ChannelMessage;
     ///
     /// # use rust_cast::CastDevice;
-    /// # let cast_device = CastDevice::connect_without_host_verification("192.168.1.2", 8009)?;
+    /// # tokio_test::block_on(async {
+    /// # let cast_device = CastDevice::connect_without_host_verification("192.168.1.2", 8009).await?;
     ///
-    /// match cast_device.receive() {
+    /// match cast_device.receive().await {
     ///     Ok(ChannelMessage::Connection(res)) => log::debug!("Connection message: {:?}", res),
-    ///     Ok(ChannelMessage::Heartbeat(_)) => cast_device.heartbeat.pong()?,
+    ///     Ok(ChannelMessage::Heartbeat(_)) => cast_device.heartbeat.pong().await?,
     ///     Ok(_) => {},
     ///     Err(err) => log::error!("Error occurred while receiving message {}", err)
     /// }
     /// # Ok::<(), rust_cast::errors::Error>(())
+    /// # });
     /// ```
     ///
     /// # Errors
@@ -204,8 +216,8 @@ impl<'a> CastDevice<'a> {
     /// # Returned values
     ///
     /// Parsed channel message.
-    pub fn receive(&self) -> Result<ChannelMessage, Error> {
-        let cast_message = self.message_manager.receive()?;
+    pub async fn receive(&self) -> Result<ChannelMessage, Error> {
+        let cast_message = self.message_manager.receive().await?;
 
         if self.connection.can_handle(&cast_message) {
             return Ok(ChannelMessage::Connection(
@@ -241,9 +253,7 @@ impl<'a> CastDevice<'a> {
     /// # Return value
     ///
     /// Instance of `CastDevice` that allows you to manage connection.
-    fn connect_to_device(
-        ssl_stream: StreamOwned<ClientConnection, TcpStream>,
-    ) -> Result<CastDevice<'a>, Error> {
+    fn connect_to_device(ssl_stream: TlsStream<TcpStream>) -> Result<CastDevice<'a>, Error> {
         let message_manager_rc = Lrc::new(MessageManager::new(ssl_stream));
 
         let heartbeat = HeartbeatChannel::new(
