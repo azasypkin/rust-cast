@@ -1,7 +1,6 @@
-use std::{
-    borrow::Cow,
-    io::{Read, Write},
-};
+use std::borrow::Cow;
+
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     cast::proxies,
@@ -24,7 +23,7 @@ pub enum HeartbeatResponse {
 
 pub struct HeartbeatChannel<'a, W>
 where
-    W: Read + Write,
+    W: AsyncRead + AsyncWrite,
 {
     sender: Cow<'a, str>,
     receiver: Cow<'a, str>,
@@ -33,7 +32,7 @@ where
 
 impl<'a, W> HeartbeatChannel<'a, W>
 where
-    W: Read + Write,
+    W: AsyncRead + AsyncWrite,
 {
     pub fn new<S>(
         sender: S,
@@ -50,30 +49,34 @@ where
         }
     }
 
-    pub fn ping(&self) -> Result<(), Error> {
+    pub async fn ping(&self) -> Result<(), Error> {
         let payload = serde_json::to_string(&proxies::heartbeat::HeartBeatRequest {
             typ: MESSAGE_TYPE_PING.to_string(),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: self.receiver.to_string(),
-            payload: CastMessagePayload::String(payload),
-        })
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: self.receiver.to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await
     }
 
-    pub fn pong(&self) -> Result<(), Error> {
+    pub async fn pong(&self) -> Result<(), Error> {
         let payload = serde_json::to_string(&proxies::heartbeat::HeartBeatRequest {
             typ: MESSAGE_TYPE_PONG.to_string(),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: self.receiver.to_string(),
-            payload: CastMessagePayload::String(payload),
-        })
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: self.receiver.to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await
     }
 
     pub fn can_handle(&self, message: &CastMessage) -> bool {

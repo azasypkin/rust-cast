@@ -38,6 +38,8 @@ pub mod media {
         pub media_session_id: Option<i32>,
     }
 
+    // Really LoadRequest
+    /// https://developers.google.com/cast/docs/reference/web_sender/chrome.cast.media.LoadRequest
     #[derive(Serialize, Debug)]
     pub struct MediaRequest {
         #[serde(rename = "requestId")]
@@ -58,6 +60,81 @@ pub mod media {
         pub custom_data: CustomData,
 
         pub autoplay: bool,
+
+        #[serde(rename = "queueData", skip_serializing_if = "Option::is_none")]
+        pub queue_data: Option<QueueData>,
+    }
+
+    /// https://developers.google.com/cast/docs/reference/web_sender/chrome.cast.media.QueueItem
+    #[derive(Serialize, Debug)]
+    pub struct QueueItem {
+        #[serde(rename = "activeTrackIds")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub active_track_ids: Option<Vec<u16>>,
+
+        pub autoplay: bool,
+
+        #[serde(rename = "customData")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub custom_data: Option<CustomData>,
+
+        #[serde(rename = "itemId")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub item_id: Option<u16>,
+
+        pub media: Media,
+
+        #[serde(rename = "playbackDuration")]
+        pub playback_duration: Option<f64>,
+
+        #[serde(rename = "preloadTime")]
+        pub preload_time: f64,
+
+        #[serde(rename = "startTime")]
+        pub start_time: f64,
+    }
+
+    /// https://developers.google.com/cast/docs/reference/web_sender/chrome.cast.media.QueueLoadRequest
+    #[derive(Serialize, Debug)]
+    pub struct QueueLoadRequest {
+        #[serde(rename = "type")]
+        pub typ: String,
+
+        #[serde(rename = "requestId")]
+        pub request_id: u32,
+
+        #[serde(rename = "customData")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub custom_data: Option<CustomData>,
+
+        pub items: Vec<QueueItem>,
+
+        // This is from https://developers.google.com/cast/docs/reference/web_sender/chrome.cast.media.QueueData
+        #[serde(rename = "queueType")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub queue_type: Option<String>,
+
+        #[serde(rename = "repeatMode")]
+        pub repeat_mode: String,
+
+        #[serde(rename = "startIndex")]
+        pub start_index: u16,
+    }
+
+    /// https://developers.google.com/cast/docs/reference/web_sender/chrome.cast.media.QueueData
+    #[derive(Serialize, Debug)]
+    pub struct QueueData {
+        pub items: Vec<QueueItem>,
+
+        #[serde(rename = "queueType")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub queue_type: Option<String>,
+
+        #[serde(rename = "repeatMode")]
+        pub repeat_mode: String,
+
+        #[serde(rename = "startIndex")]
+        pub start_index: u16,
     }
 
     #[derive(Serialize, Debug)]
@@ -226,6 +303,15 @@ pub mod media {
     }
 
     #[derive(Deserialize, Debug)]
+    pub struct ExtendedStatus {
+        #[serde(rename = "playerState")]
+        pub player_state: String,
+        #[serde(rename = "mediaSessionId")]
+        pub media_session_id: Option<i32>,
+        pub media: Option<Media>,
+    }
+
+    #[derive(Deserialize, Debug)]
     pub struct Status {
         #[serde(rename = "mediaSessionId")]
         pub media_session_id: i32,
@@ -235,8 +321,16 @@ pub mod media {
         pub playback_rate: f32,
         #[serde(rename = "playerState")]
         pub player_state: String,
+        #[serde(rename = "currentItemId")]
+        pub current_item_id: Option<u16>,
+        #[serde(rename = "loadingItemId")]
+        pub loading_item_id: Option<u16>,
+        #[serde(rename = "preloadedItemId")]
+        pub preloaded_item_id: Option<u16>,
         #[serde(rename = "idleReason")]
         pub idle_reason: Option<String>,
+        #[serde(rename = "extendedStatus")]
+        pub extended_status: Option<ExtendedStatus>,
         #[serde(rename = "currentTime")]
         pub current_time: Option<f32>,
         #[serde(rename = "supportedMediaCommands")]
