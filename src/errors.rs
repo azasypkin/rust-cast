@@ -16,9 +16,11 @@ pub enum Error {
     Io(IoError),
     /// This variant includes all possible errors that come from Protobuf layer.
     Protobuf(ProtobufError),
-    /// This variant includes everything related to (de)serialization of incoming and outgoing
+    /// Errors with JSON (de)serialization of incoming and outgoing
     /// messages.
     Serialization(SerializationError),
+    /// Errors parsing messages (valid JSON but bad semantics)
+    Parsing(String),
     /// This variant is used to indicate invalid DNS name used to connect to Cast device.
     Dns(InvalidDnsNameError),
     /// This variant includes any error that comes from rustls.
@@ -34,6 +36,7 @@ impl Display for Error {
             Error::Io(ref err) => Display::fmt(&err, f),
             Error::Protobuf(ref err) => Display::fmt(&err, f),
             Error::Serialization(ref err) => Display::fmt(&err, f),
+            Error::Parsing(ref message) => f.write_str(message),
             Error::Tls(ref err) => Display::fmt(&err, f),
             Error::Dns(ref err) => Display::fmt(&err, f),
             Error::Namespace(ref err) => Display::fmt(&err, f),
@@ -50,6 +53,7 @@ impl StdError for Error {
             Error::Dns(ref err) => Some(err),
             Error::Serialization(ref err) => Some(err),
             Error::Internal(_) => None,
+            Error::Parsing(_) => None,
             Error::Namespace(_) => None,
         }
     }
