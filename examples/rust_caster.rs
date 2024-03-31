@@ -64,8 +64,8 @@ struct Args {
     flag_media_seek: Option<f32>,
 }
 
-fn print_info(device: &CastDevice) {
-    let status = device.receiver.get_status().unwrap();
+async fn print_info(device: &CastDevice<'_>) {
+    let status = device.receiver.get_status().await.unwrap();
 
     println!(
         "\n{} {}",
@@ -104,8 +104,8 @@ fn print_info(device: &CastDevice) {
     }
 }
 
-fn run_app(device: &CastDevice, app_to_run: &CastDeviceApp) {
-    let app = device.receiver.launch_app(app_to_run).unwrap();
+async fn run_app(device: &CastDevice<'_>, app_to_run: &CastDeviceApp) {
+    let app = device.receiver.launch_app(app_to_run).await.unwrap();
 
     println!(
         "{}{}{}{}{}{}{}",
@@ -119,8 +119,8 @@ fn run_app(device: &CastDevice, app_to_run: &CastDeviceApp) {
     );
 }
 
-fn stop_app(device: &CastDevice, app_to_run: &CastDeviceApp) {
-    let status = device.receiver.get_status().unwrap();
+async fn stop_app(device: &CastDevice<'_>, app_to_run: &CastDeviceApp) {
+    let status = device.receiver.get_status().await.unwrap();
 
     let app = status
         .applications
@@ -129,7 +129,11 @@ fn stop_app(device: &CastDevice, app_to_run: &CastDeviceApp) {
 
     match app {
         Some(app) => {
-            device.receiver.stop_app(app.session_id.as_str()).unwrap();
+            device
+                .receiver
+                .stop_app(app.session_id.as_str())
+                .await
+                .unwrap();
 
             println!(
                 "{}{}{}{}{}{}{}",
@@ -153,11 +157,15 @@ fn stop_app(device: &CastDevice, app_to_run: &CastDeviceApp) {
     }
 }
 
-fn stop_current_app(device: &CastDevice) {
-    let status = device.receiver.get_status().unwrap();
+async fn stop_current_app(device: &CastDevice<'_>) {
+    let status = device.receiver.get_status().await.unwrap();
     match status.applications.first() {
         Some(app) => {
-            device.receiver.stop_app(app.session_id.as_str()).unwrap();
+            device
+                .receiver
+                .stop_app(app.session_id.as_str())
+                .await
+                .unwrap();
 
             println!(
                 "{}{}{}{}{}{}{}",
@@ -174,18 +182,19 @@ fn stop_current_app(device: &CastDevice) {
     }
 }
 
-fn play_media(
-    device: &CastDevice,
+async fn play_media(
+    device: &CastDevice<'_>,
     app_to_run: &CastDeviceApp,
     media: String,
     media_type: String,
     media_stream_type: StreamType,
 ) {
-    let app = device.receiver.launch_app(app_to_run).unwrap();
+    let app = device.receiver.launch_app(app_to_run).await.unwrap();
 
     device
         .connection
         .connect(app.transport_id.as_str())
+        .await
         .unwrap();
 
     let status = device
@@ -201,6 +210,7 @@ fn play_media(
                 metadata: None,
             },
         )
+        .await
         .unwrap();
 
     for i in 0..status.entries.len() {
@@ -257,14 +267,14 @@ fn play_media(
     }
 }
 
-fn discover() -> Option<(String, u16)> {
+async fn discover() -> Option<(String, u16)> {
     let mdns = ServiceDaemon::new().expect("Failed to create mDNS daemon.");
 
     let receiver = mdns
         .browse(SERVICE_TYPE)
         .expect("Failed to browse mDNS services.");
 
-    while let Ok(event) = receiver.recv() {
+    while let Ok(event) = receiver.recv_async().await {
         match event {
             ServiceEvent::ServiceResolved(info) => {
                 let mut addresses = info
@@ -297,7 +307,8 @@ fn discover() -> Option<(String, u16)> {
     None
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::init();
 
     let args: Args = Docopt::new(USAGE)
@@ -308,14 +319,14 @@ fn main() {
         Some(address) => (address, args.flag_port),
         None => {
             println!("Cast Device address is not specified, trying to discover...");
-            discover().unwrap_or_else(|| {
+            discover().await.unwrap_or_else(|| {
                 println!("No Cast device discovered, please specify device address explicitly.");
                 std::process::exit(1);
             })
         }
     };
 
-    let cast_device = match CastDevice::connect_without_host_verification(address, port) {
+    let cast_device = match CastDevice::connect_without_host_verification(address, port).await {
         Ok(cast_device) => cast_device,
         Err(err) => panic!("Could not establish connection with Cast Device: {:?}", err),
     };
@@ -323,32 +334,33 @@ fn main() {
     cast_device
         .connection
         .connect(DEFAULT_DESTINATION_ID.to_string())
+        .await
         .unwrap();
-    cast_device.heartbeat.ping().unwrap();
+    cast_device.heartbeat.ping().await.unwrap();
 
     // Information about cast device.
     if args.flag_info.is_some() {
-        return print_info(&cast_device);
+        return print_info(&cast_device).await;
     }
 
     // Run specific application.
     if let Some(app) = args.flag_run {
-        return run_app(&cast_device, &CastDeviceApp::from_str(&app).unwrap());
+        return run_app(&cast_device, &CastDeviceApp::from_str(&app).unwrap()).await;
     }
 
     // Stop specific application.
     if let Some(app) = args.flag_stop {
-        return stop_app(&cast_device, &CastDeviceApp::from_str(&app).unwrap());
+        return stop_app(&cast_device, &CastDeviceApp::from_str(&app).unwrap()).await;
     }
 
     // Stop currently active application.
     if args.flag_stop_current {
-        return stop_current_app(&cast_device);
+        return stop_current_app(&cast_device).await;
     }
 
     // Adjust volume level.
     if let Some(level) = args.flag_media_volume {
-        let volume = cast_device.receiver.set_volume(level).unwrap();
+        let volume = cast_device.receiver.set_volume(level).await.unwrap();
         println!(
             "{}{}",
             Green.paint("Volume level has been set to: "),
@@ -360,7 +372,11 @@ fn main() {
     // Mute/unmute cast device.
     if args.flag_media_mute || args.flag_media_unmute {
         let mute_or_unmute = args.flag_media_mute;
-        let volume = cast_device.receiver.set_volume(mute_or_unmute).unwrap();
+        let volume = cast_device
+            .receiver
+            .set_volume(mute_or_unmute)
+            .await
+            .unwrap();
         println!(
             "{}{}",
             Green.paint("Cast device is muted: "),
@@ -376,7 +392,7 @@ fn main() {
         || args.flag_media_seek.is_some()
     {
         let app_to_manage = CastDeviceApp::from_str(args.flag_media_app.as_str()).unwrap();
-        let status = cast_device.receiver.get_status().unwrap();
+        let status = cast_device.receiver.get_status().await.unwrap();
 
         let app = status
             .applications
@@ -388,11 +404,13 @@ fn main() {
                 cast_device
                     .connection
                     .connect(app.transport_id.as_str())
+                    .await
                     .unwrap();
 
                 let status = cast_device
                     .media
                     .get_status(app.transport_id.as_str(), None)
+                    .await
                     .unwrap();
                 let status = status.entries.first().unwrap();
 
@@ -403,6 +421,7 @@ fn main() {
                         cast_device
                             .media
                             .pause(app.transport_id.as_str(), status.media_session_id)
+                            .await
                             .unwrap(),
                     );
                 } else if args.flag_media_play {
@@ -410,6 +429,7 @@ fn main() {
                         cast_device
                             .media
                             .play(app.transport_id.as_str(), status.media_session_id)
+                            .await
                             .unwrap(),
                     );
                 } else if args.flag_media_stop {
@@ -417,6 +437,7 @@ fn main() {
                         cast_device
                             .media
                             .stop(app.transport_id.as_str(), status.media_session_id)
+                            .await
                             .unwrap(),
                     );
                 } else if args.flag_media_seek.is_some() {
@@ -429,6 +450,7 @@ fn main() {
                                 Some(args.flag_media_seek.unwrap()),
                                 None,
                             )
+                            .await
                             .unwrap(),
                     );
                 }
@@ -510,15 +532,16 @@ fn main() {
             media,
             media_type,
             media_stream_type,
-        );
+        )
+        .await;
 
         loop {
-            match cast_device.receive() {
+            match cast_device.receive().await {
                 Ok(ChannelMessage::Heartbeat(response)) => {
                     println!("[Heartbeat] {:?}", response);
 
                     if let HeartbeatResponse::Ping = response {
-                        cast_device.heartbeat.pong().unwrap();
+                        cast_device.heartbeat.pong().await.unwrap();
                     }
                 }
 

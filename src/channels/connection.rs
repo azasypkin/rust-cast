@@ -1,7 +1,6 @@
-use std::{
-    borrow::Cow,
-    io::{Read, Write},
-};
+use std::borrow::Cow;
+
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     cast::proxies,
@@ -25,7 +24,7 @@ pub enum ConnectionResponse {
 
 pub struct ConnectionChannel<'a, W>
 where
-    W: Read + Write,
+    W: AsyncRead + AsyncWrite,
 {
     sender: Cow<'a, str>,
     message_manager: Lrc<MessageManager<W>>,
@@ -33,7 +32,7 @@ where
 
 impl<'a, W> ConnectionChannel<'a, W>
 where
-    W: Read + Write,
+    W: AsyncRead + AsyncWrite,
 {
     pub fn new<S>(sender: S, message_manager: Lrc<MessageManager<W>>) -> ConnectionChannel<'a, W>
     where
@@ -45,7 +44,7 @@ where
         }
     }
 
-    pub fn connect<S>(&self, destination: S) -> Result<(), Error>
+    pub async fn connect<S>(&self, destination: S) -> Result<(), Error>
     where
         S: Into<Cow<'a, str>>,
     {
@@ -54,15 +53,17 @@ where
             user_agent: CHANNEL_USER_AGENT.to_string(),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: destination.into().to_string(),
-            payload: CastMessagePayload::String(payload),
-        })
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: destination.into().to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await
     }
 
-    pub fn disconnect<S>(&self, destination: S) -> Result<(), Error>
+    pub async fn disconnect<S>(&self, destination: S) -> Result<(), Error>
     where
         S: Into<Cow<'a, str>>,
     {
@@ -71,12 +72,14 @@ where
             user_agent: CHANNEL_USER_AGENT.to_string(),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: destination.into().to_string(),
-            payload: CastMessagePayload::String(payload),
-        })
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: destination.into().to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await
     }
 
     pub fn can_handle(&self, message: &CastMessage) -> bool {

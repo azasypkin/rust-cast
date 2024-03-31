@@ -1,12 +1,7 @@
-use std::{
-    borrow::Cow,
-    convert::Into,
-    io::{Read, Write},
-    str::FromStr,
-    string::ToString,
-};
+use std::{borrow::Cow, convert::Into, str::FromStr, string::ToString};
 
 use serde::Serialize;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     cast::proxies,
@@ -170,7 +165,7 @@ impl ToString for CastDeviceApp {
 
 pub struct ReceiverChannel<'a, W>
 where
-    W: Write + Read,
+    W: AsyncRead + AsyncWrite,
 {
     sender: Cow<'a, str>,
     receiver: Cow<'a, str>,
@@ -179,7 +174,7 @@ where
 
 impl<'a, W> ReceiverChannel<'a, W>
 where
-    W: Write + Read,
+    W: AsyncRead + AsyncWrite,
 {
     pub fn new<S>(
         sender: S,
@@ -204,14 +199,16 @@ where
     /// use std::str::FromStr;
     /// use rust_cast::{CastDevice, channels::receiver::CastDeviceApp};
     ///
-    /// # let cast_device = CastDevice::connect_without_host_verification("host", 1234).unwrap();
-    /// cast_device.receiver.launch_app(&CastDeviceApp::from_str("youtube").unwrap());
+    /// # tokio_test::block_on(async {
+    /// # let cast_device = CastDevice::connect_without_host_verification("host", 1234).await.unwrap();
+    /// cast_device.receiver.launch_app(&CastDeviceApp::from_str("youtube").unwrap()).await;
+    /// # })
     /// ```
     ///
     /// # Arguments
     ///
     /// * `app` - `CastDeviceApp` instance reference to run.
-    pub fn launch_app(&self, app: &CastDeviceApp) -> Result<Application, Error> {
+    pub async fn launch_app(&self, app: &CastDeviceApp) -> Result<Application, Error> {
         let request_id = self.message_manager.generate_request_id().get();
 
         let payload = serde_json::to_string(&proxies::receiver::AppLaunchRequest {
@@ -220,39 +217,43 @@ where
             app_id: app.to_string(),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: self.receiver.to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: self.receiver.to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
         // Once application is run cast receiver device should emit status update event, or launch
         // error event if something went wrong.
-        self.message_manager.receive_find_map(|message| {
-            if !self.can_handle(message) {
-                return Ok(None);
-            }
-
-            match self.parse(message)? {
-                ReceiverResponse::Status(mut status) => {
-                    if status.request_id == request_id {
-                        return Ok(Some(status.applications.remove(0)));
-                    }
+        self.message_manager
+            .receive_find_map(|message| {
+                if !self.can_handle(message) {
+                    return Ok(None);
                 }
-                ReceiverResponse::LaunchError(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(format!(
-                            "Could not run application ({}).",
-                            error.reason.unwrap_or_else(|| "Unknown".to_string())
-                        )));
-                    }
-                }
-                _ => {}
-            }
 
-            Ok(None)
-        })
+                match self.parse(message)? {
+                    ReceiverResponse::Status(mut status) => {
+                        if status.request_id == request_id {
+                            return Ok(Some(status.applications.remove(0)));
+                        }
+                    }
+                    ReceiverResponse::LaunchError(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(format!(
+                                "Could not run application ({}).",
+                                error.reason.unwrap_or_else(|| "Unknown".to_string())
+                            )));
+                        }
+                    }
+                    _ => {}
+                }
+
+                Ok(None)
+            })
+            .await
     }
 
     /// Broadcasts a message over a cast device's message bus.
@@ -271,7 +272,7 @@ where
     ///
     /// * `namespace` - Message namespace that should start with `urn:x-cast:`.
     /// * `message` - Message instance to send.
-    pub fn broadcast_message<M: Serialize>(
+    pub async fn broadcast_message<M: Serialize>(
         &self,
         namespace: &str,
         message: &M,
@@ -283,12 +284,14 @@ where
             )));
         }
         let payload = serde_json::to_string(message)?;
-        self.message_manager.send(CastMessage {
-            namespace: namespace.to_string(),
-            source: self.sender.to_string(),
-            destination: "*".into(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: namespace.to_string(),
+                source: self.sender.to_string(),
+                destination: "*".into(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
         Ok(())
     }
@@ -297,7 +300,7 @@ where
     ///
     /// # Arguments
     /// * `session_id` - identifier of the active application session from `Application` instance.
-    pub fn stop_app<S>(&self, session_id: S) -> Result<(), Error>
+    pub async fn stop_app<S>(&self, session_id: S) -> Result<(), Error>
     where
         S: Into<Cow<'a, str>>,
     {
@@ -309,39 +312,43 @@ where
             session_id: session_id.into(),
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: self.receiver.to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: self.receiver.to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
         // Once application is stopped cast receiver device should emit status update event, or
         // invalid request event if provided session id is not valid.
-        self.message_manager.receive_find_map(|message| {
-            if !self.can_handle(message) {
-                return Ok(None);
-            }
-
-            match self.parse(message)? {
-                ReceiverResponse::Status(status) => {
-                    if status.request_id == request_id {
-                        return Ok(Some(()));
-                    }
+        self.message_manager
+            .receive_find_map(|message| {
+                if !self.can_handle(message) {
+                    return Ok(None);
                 }
-                ReceiverResponse::InvalidRequest(error) => {
-                    if error.request_id == request_id {
-                        return Err(Error::Internal(format!(
-                            "Invalid request ({}).",
-                            error.reason.unwrap_or_else(|| "Unknown".to_string())
-                        )));
-                    }
-                }
-                _ => {}
-            }
 
-            Ok(None)
-        })
+                match self.parse(message)? {
+                    ReceiverResponse::Status(status) => {
+                        if status.request_id == request_id {
+                            return Ok(Some(()));
+                        }
+                    }
+                    ReceiverResponse::InvalidRequest(error) => {
+                        if error.request_id == request_id {
+                            return Err(Error::Internal(format!(
+                                "Invalid request ({}).",
+                                error.reason.unwrap_or_else(|| "Unknown".to_string())
+                            )));
+                        }
+                    }
+                    _ => {}
+                }
+
+                Ok(None)
+            })
+            .await
     }
 
     /// Retrieves status of the cast device receiver.
@@ -349,7 +356,7 @@ where
     /// # Return value
     ///
     /// Returned `Result` should consist of either `Status` instance or an `Error`.
-    pub fn get_status(&self) -> Result<Status, Error> {
+    pub async fn get_status(&self) -> Result<Status, Error> {
         let request_id = self.message_manager.generate_request_id().get();
 
         let payload = serde_json::to_string(&proxies::receiver::GetStatusRequest {
@@ -357,27 +364,31 @@ where
             request_id,
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: self.receiver.to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: self.receiver.to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
-        self.message_manager.receive_find_map(|message| {
-            if !self.can_handle(message) {
-                return Ok(None);
-            }
-
-            let message = self.parse(message)?;
-            if let ReceiverResponse::Status(status) = message {
-                if status.request_id == request_id {
-                    return Ok(Some(status));
+        self.message_manager
+            .receive_find_map(|message| {
+                if !self.can_handle(message) {
+                    return Ok(None);
                 }
-            }
 
-            Ok(None)
-        })
+                let message = self.parse(message)?;
+                if let ReceiverResponse::Status(status) = message {
+                    if status.request_id == request_id {
+                        return Ok(Some(status));
+                    }
+                }
+
+                Ok(None)
+            })
+            .await
     }
 
     /// Sets volume for the active cast device.
@@ -394,7 +405,7 @@ where
     /// # Errors
     ///
     /// Usually method can fail only if network connection with cast device is lost for some reason.
-    pub fn set_volume<T>(&self, volume: T) -> Result<Volume, Error>
+    pub async fn set_volume<T>(&self, volume: T) -> Result<Volume, Error>
     where
         T: Into<Volume>,
     {
@@ -410,27 +421,31 @@ where
             },
         })?;
 
-        self.message_manager.send(CastMessage {
-            namespace: CHANNEL_NAMESPACE.to_string(),
-            source: self.sender.to_string(),
-            destination: self.receiver.to_string(),
-            payload: CastMessagePayload::String(payload),
-        })?;
+        self.message_manager
+            .send(CastMessage {
+                namespace: CHANNEL_NAMESPACE.to_string(),
+                source: self.sender.to_string(),
+                destination: self.receiver.to_string(),
+                payload: CastMessagePayload::String(payload),
+            })
+            .await?;
 
-        self.message_manager.receive_find_map(|message| {
-            if !self.can_handle(message) {
-                return Ok(None);
-            }
-
-            let message = self.parse(message)?;
-            if let ReceiverResponse::Status(status) = message {
-                if status.request_id == request_id {
-                    return Ok(Some(status.volume));
+        self.message_manager
+            .receive_find_map(|message| {
+                if !self.can_handle(message) {
+                    return Ok(None);
                 }
-            }
 
-            Ok(None)
-        })
+                let message = self.parse(message)?;
+                if let ReceiverResponse::Status(status) = message {
+                    if status.request_id == request_id {
+                        return Ok(Some(status.volume));
+                    }
+                }
+
+                Ok(None)
+            })
+            .await
     }
 
     pub fn can_handle(&self, message: &CastMessage) -> bool {
