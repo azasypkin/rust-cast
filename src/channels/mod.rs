@@ -5,31 +5,44 @@ pub mod receiver;
 
 #[cfg(test)]
 mod tests {
+    use byteorder::{BigEndian, WriteBytesExt};
     use std::io::{Read, Write};
 
     pub struct MockTcpStream {
+        pub read_buffer_len: Option<Vec<u8>>,
         pub read_buffer: Vec<u8>,
-        pub read_pos: usize,
         pub write_buffer: Vec<u8>,
     }
 
     impl MockTcpStream {
         pub fn new() -> Self {
             MockTcpStream {
+                read_buffer_len: None,
                 read_buffer: vec![],
-                read_pos: 0,
                 write_buffer: vec![],
             }
+        }
+
+        pub fn set_message<M: protobuf::Message>(&mut self, message: M) {
+            let message = message.write_to_bytes().unwrap();
+            let mut len = Vec::<u8>::new();
+            len.write_u32::<BigEndian>(message.len() as u32).unwrap();
+
+            self.read_buffer_len = Some(len);
+            self.read_buffer = message;
         }
     }
 
     impl Read for MockTcpStream {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            let bytes_to_read = std::cmp::min(buf.len(), self.read_buffer.len() - self.read_pos);
-            buf[..bytes_to_read]
-                .copy_from_slice(&self.read_buffer[self.read_pos..self.read_pos + bytes_to_read]);
-            self.read_pos += bytes_to_read;
-            Ok(bytes_to_read)
+            return if let Some(len) = self.read_buffer_len.take() {
+                buf[..4].copy_from_slice(len.as_slice());
+                Ok(4)
+            } else {
+                let len = self.read_buffer.len();
+                buf[..len].copy_from_slice(self.read_buffer.as_slice());
+                Ok(len)
+            };
         }
     }
 

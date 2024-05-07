@@ -1537,9 +1537,60 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{channels::tests::MockTcpStream, DEFAULT_RECEIVER_ID, DEFAULT_SENDER_ID};
+    use crate::{
+        cast::cast_channel::cast_message::{PayloadType, ProtocolVersion},
+        channels::tests::MockTcpStream,
+        DEFAULT_RECEIVER_ID, DEFAULT_SENDER_ID,
+    };
+    use protobuf::EnumOrUnknown;
 
     use super::*;
+
+    #[test]
+    fn test_get_status() {
+        let mut stream = MockTcpStream::new();
+        let payload = format!(
+            r#"{{
+            "requestId":1,
+            "type":"{}",
+            "status":[
+                {{
+                    "mediaSessionId":1,
+                    "playerState":"PLAYING",
+                    "playbackRate":1.0,
+                    "supportedMediaCommands":2300
+                }}
+            ]
+        }}"#,
+            MESSAGE_TYPE_MEDIA_STATUS
+        );
+        stream.set_message(crate::cast::cast_channel::CastMessage {
+            protocol_version: Some(EnumOrUnknown::new(ProtocolVersion::CASTV2_1_2)),
+            source_id: Some(DEFAULT_RECEIVER_ID.to_string()),
+            destination_id: Some(DEFAULT_SENDER_ID.to_string()),
+            namespace: Some(CHANNEL_NAMESPACE.to_string()),
+            payload_type: Some(EnumOrUnknown::new(PayloadType::STRING)),
+            payload_utf8: Some(payload),
+            payload_binary: None,
+            continued: None,
+            remaining_length: None,
+            special_fields: Default::default(),
+        });
+        let channel = MediaChannel {
+            sender: Cow::from(DEFAULT_SENDER_ID),
+            message_manager: Lrc::new(MessageManager::new(stream)),
+        };
+
+        let result = channel.get_status("MyAppTransportId", None).unwrap();
+
+        assert_eq!(1, result.request_id);
+        if let Some(entry) = result.entries.first() {
+            assert_eq!(1, entry.media_session_id);
+            assert_eq!(PlayerState::Playing, entry.player_state);
+            assert_eq!(1.0, entry.playback_rate);
+            assert_eq!(2300, entry.supported_media_commands);
+        }
+    }
 
     #[test]
     fn test_parse_media_error() {
