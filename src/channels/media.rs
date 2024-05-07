@@ -27,6 +27,7 @@ const MESSAGE_TYPE_LOAD_CANCELLED: &str = "LOAD_CANCELLED";
 const MESSAGE_TYPE_LOAD_FAILED: &str = "LOAD_FAILED";
 const MESSAGE_TYPE_INVALID_PLAYER_STATE: &str = "INVALID_PLAYER_STATE";
 const MESSAGE_TYPE_INVALID_REQUEST: &str = "INVALID_REQUEST";
+const MESSAGE_TYPE_ERROR: &str = "ERROR";
 
 /// Describes the way cast device should stream content.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -191,7 +192,7 @@ impl TryFrom<&proxies::media::Metadata> for Metadata {
                 return Err(Error::Parsing(format!(
                     "Bad metadataType {}",
                     m.metadata_type
-                )))
+                )));
             }
         })
     }
@@ -771,6 +772,154 @@ pub struct InvalidRequest {
     pub reason: Option<String>,
 }
 
+/// The media error encountered during media operations.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MediaError {
+    /// The detailed error code associated with the media error.
+    pub detailed_error_code: MediaDetailedErrorCode,
+    /// The type of the error message.
+    pub message_type: String,
+}
+
+/// The detailed media error code.
+/// https://developers.google.com/android/reference/com/google/android/gms/cast/MediaError.DetailedErrorCode#constants
+#[derive(Clone, Debug, PartialEq)]
+pub enum MediaDetailedErrorCode {
+    /// An error occurs outside of the framework (e.g., if an event handler throws an error).
+    App = 900,
+    /// Break clip load interceptor fails.
+    BreakClipLoadingError = 901,
+    /// Break seek interceptor fails.
+    BreakSeekInterceptorError = 902,
+    /// A DASH manifest contains invalid segment info.
+    DashInvalidSegmentInfo = 423,
+    /// A DASH manifest is missing a MimeType.
+    DashManifestNoMimeType = 422,
+    /// A DASH manifest is missing periods.
+    DashManifestNoPeriods = 421,
+    /// An unknown error occurs while parsing a DASH manifest.
+    DashManifestUnknown = 420,
+    /// An unknown network error occurs while handling a DASH stream.
+    DashNetwork = 321,
+    /// A DASH stream is missing an init.
+    DashNoInit = 322,
+    /// Returned when an unknown error occurs.
+    Generic = 999,
+    /// An error occurs while parsing an HLS master manifest.
+    HlsManifestMaster = 411,
+    /// An error occurs while parsing an HLS playlist.
+    HlsManifestPlaylist = 412,
+    /// An HLS segment is invalid.
+    HlsNetworkInvalidSegment = 315,
+    /// A request for an HLS key fails before it is sent.
+    HlsNetworkKeyLoad = 314,
+    /// An HLS master playlist fails to download.
+    HlsNetworkMasterPlaylist = 311,
+    /// An HLS key fails to download.
+    HlsNetworkNoKeyResponse = 313,
+    /// An HLS playlist fails to download.
+    HlsNetworkPlaylist = 312,
+    /// An HLS segment fails to parse.
+    HlsSegmentParsing = 316,
+    /// When an image fails to load.
+    ImageError = 903,
+    /// A load command failed.
+    LoadFailed = 905,
+    /// A load was interrupted by an unload, or by another load.
+    LoadInterrupted = 904,
+    /// An unknown error occurs while parsing a manifest.
+    ManifestUnknown = 400,
+    /// There is a media keys failure due to a network issue.
+    MediakeysNetwork = 201,
+    /// There is an unknown error with media keys.
+    MediakeysUnknown = 200,
+    /// A MediaKeySession object cannot be created.
+    MediakeysUnsupported = 202,
+    /// Crypto failed.
+    MediakeysWebcrypto = 203,
+    /// The fetching process for the media resource was aborted by the user agent at the user's request.
+    MediaAborted = 101,
+    /// An error occurred while decoding the media resource, after the resource was established to be usable.
+    MediaDecode = 102,
+    /// An error message was sent to the sender.
+    MediaErrorMessage = 906,
+    /// A network error caused the user agent to stop fetching the media resource, after the resource was established to be usable.
+    MediaNetwork = 103,
+    /// The media resource indicated by the src attribute was not suitable.
+    MediaSrcNotSupported = 104,
+    /// The HTMLMediaElement throws an error, but CAF does not recognize the specific error.
+    MediaUnknown = 100,
+    /// There was an unknown network issue.
+    NetworkUnknown = 300,
+    /// A segment fails to download.
+    SegmentNetwork = 301,
+    /// An unknown segment error occurs.
+    SegmentUnknown = 500,
+    /// An error occurs while parsing a Smooth manifest.
+    SmoothManifest = 431,
+    /// An unknown network error occurs while handling a Smooth stream.
+    SmoothNetwork = 331,
+    /// A Smooth stream is missing media data.
+    SmoothNoMediaData = 332,
+    /// A source buffer cannot be added to the MediaSource.
+    SourceBufferFailure = 110,
+    /// An unknown error occurred with a text stream.
+    TextUnknown = 600,
+}
+
+impl TryFrom<i32> for MediaDetailedErrorCode {
+    type Error = Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            900 => Ok(MediaDetailedErrorCode::App),
+            901 => Ok(MediaDetailedErrorCode::BreakClipLoadingError),
+            902 => Ok(MediaDetailedErrorCode::BreakSeekInterceptorError),
+            423 => Ok(MediaDetailedErrorCode::DashInvalidSegmentInfo),
+            422 => Ok(MediaDetailedErrorCode::DashManifestNoMimeType),
+            421 => Ok(MediaDetailedErrorCode::DashManifestNoPeriods),
+            420 => Ok(MediaDetailedErrorCode::DashManifestUnknown),
+            321 => Ok(MediaDetailedErrorCode::DashNetwork),
+            322 => Ok(MediaDetailedErrorCode::DashNoInit),
+            999 => Ok(MediaDetailedErrorCode::Generic),
+            411 => Ok(MediaDetailedErrorCode::HlsManifestMaster),
+            412 => Ok(MediaDetailedErrorCode::HlsManifestPlaylist),
+            315 => Ok(MediaDetailedErrorCode::HlsNetworkInvalidSegment),
+            314 => Ok(MediaDetailedErrorCode::HlsNetworkKeyLoad),
+            311 => Ok(MediaDetailedErrorCode::HlsNetworkMasterPlaylist),
+            313 => Ok(MediaDetailedErrorCode::HlsNetworkNoKeyResponse),
+            312 => Ok(MediaDetailedErrorCode::HlsNetworkPlaylist),
+            316 => Ok(MediaDetailedErrorCode::HlsSegmentParsing),
+            903 => Ok(MediaDetailedErrorCode::ImageError),
+            905 => Ok(MediaDetailedErrorCode::LoadFailed),
+            904 => Ok(MediaDetailedErrorCode::LoadInterrupted),
+            400 => Ok(MediaDetailedErrorCode::ManifestUnknown),
+            201 => Ok(MediaDetailedErrorCode::MediakeysNetwork),
+            200 => Ok(MediaDetailedErrorCode::MediakeysUnknown),
+            202 => Ok(MediaDetailedErrorCode::MediakeysUnsupported),
+            203 => Ok(MediaDetailedErrorCode::MediakeysWebcrypto),
+            101 => Ok(MediaDetailedErrorCode::MediaAborted),
+            102 => Ok(MediaDetailedErrorCode::MediaDecode),
+            906 => Ok(MediaDetailedErrorCode::MediaErrorMessage),
+            103 => Ok(MediaDetailedErrorCode::MediaNetwork),
+            104 => Ok(MediaDetailedErrorCode::MediaSrcNotSupported),
+            100 => Ok(MediaDetailedErrorCode::MediaUnknown),
+            300 => Ok(MediaDetailedErrorCode::NetworkUnknown),
+            301 => Ok(MediaDetailedErrorCode::SegmentNetwork),
+            500 => Ok(MediaDetailedErrorCode::SegmentUnknown),
+            431 => Ok(MediaDetailedErrorCode::SmoothManifest),
+            331 => Ok(MediaDetailedErrorCode::SmoothNetwork),
+            332 => Ok(MediaDetailedErrorCode::SmoothNoMediaData),
+            110 => Ok(MediaDetailedErrorCode::SourceBufferFailure),
+            600 => Ok(MediaDetailedErrorCode::TextUnknown),
+            _ => Err(Error::Parsing(format!(
+                "media error code {} is not supported",
+                value
+            ))),
+        }
+    }
+}
+
 /// Represents all currently supported incoming messages that media channel can handle.
 #[derive(Clone, Debug)]
 pub enum MediaResponse {
@@ -785,6 +934,8 @@ pub enum MediaResponse {
     InvalidPlayerState(InvalidPlayerState),
     /// Error indicating that request is not valid.
     InvalidRequest(InvalidRequest),
+    /// The media error that occurred while executing a media operation on the media channel.
+    Error(MediaError),
     /// Used every time when channel can't parse the message. Associated data contains `type` string
     /// field and raw JSON data returned from cast device.
     NotImplemented(String, serde_json::Value),
@@ -1255,7 +1406,7 @@ where
             _ => {
                 return Err(Error::Internal(
                     "Binary payload is not supported!".to_string(),
-                ))
+                ));
             }
         };
 
@@ -1311,6 +1462,16 @@ where
                 MediaResponse::InvalidRequest(InvalidRequest {
                     request_id: reply.request_id,
                     reason: reply.reason,
+                })
+            }
+            MESSAGE_TYPE_ERROR => {
+                let reply: proxies::media::MediaErrorReply = serde_json::value::from_value(reply)?;
+                let detailed_error_code =
+                    MediaDetailedErrorCode::try_from(reply.detailed_error_code)?;
+
+                MediaResponse::Error(MediaError {
+                    detailed_error_code,
+                    message_type: reply.message_type,
                 })
             }
             _ => MediaResponse::NotImplemented(message_type.to_string(), reply),
@@ -1371,5 +1532,66 @@ where
 
             Ok(None)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{channels::tests::MockTcpStream, DEFAULT_RECEIVER_ID, DEFAULT_SENDER_ID};
+
+    use super::*;
+
+    #[test]
+    fn test_parse_media_error() {
+        let message = CastMessage {
+            namespace: CHANNEL_NAMESPACE.to_string(),
+            source: DEFAULT_RECEIVER_ID.to_string(),
+            destination: DEFAULT_SENDER_ID.to_string(),
+            payload: CastMessagePayload::String(
+                "{\"type\":\"ERROR\",\"detailedErrorCode\":104,\"itemId\":1}".to_string(),
+            ),
+        };
+        let channel = MediaChannel {
+            sender: Cow::from(DEFAULT_SENDER_ID),
+            message_manager: Lrc::new(MessageManager::new(MockTcpStream::new())),
+        };
+        let expected_result = MediaError {
+            detailed_error_code: MediaDetailedErrorCode::MediaSrcNotSupported,
+            message_type: MESSAGE_TYPE_ERROR.to_string(),
+        };
+
+        let response = channel.parse(&message).unwrap();
+
+        if let MediaResponse::Error(result) = response {
+            assert_eq!(expected_result, result);
+        } else {
+            panic!("expected MediaResponse::Error, but got {:?}", response);
+        }
+    }
+
+    #[test]
+    fn test_parse_unknown_message_type() {
+        let message_type = "FOO_BAR";
+        let payload = format!("{{\"type\":\"{}\",\"itemId\":666}}", message_type);
+        let expected_payload = serde_json::from_str::<serde_json::Value>(payload.as_str()).unwrap();
+        let message = CastMessage {
+            namespace: CHANNEL_NAMESPACE.to_string(),
+            source: DEFAULT_RECEIVER_ID.to_string(),
+            destination: DEFAULT_SENDER_ID.to_string(),
+            payload: CastMessagePayload::String(payload),
+        };
+        let channel = MediaChannel {
+            sender: Cow::from(DEFAULT_SENDER_ID),
+            message_manager: Lrc::new(MessageManager::new(MockTcpStream::new())),
+        };
+
+        let response = channel.parse(&message).unwrap();
+
+        if let MediaResponse::NotImplemented(result_code, result_payload) = response {
+            assert_eq!(message_type, result_code);
+            assert_eq!(expected_payload, result_payload);
+        } else {
+            panic!("expected MediaResponse::Error, but got {:?}", response);
+        }
     }
 }
