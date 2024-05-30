@@ -39,3 +39,4 @@ protobuf-codegen = "=3.4.0"
 
 [features]
 thread_safe = []
+cast = []
