@@ -1,62 +1,41 @@
+use std::io::Error as IoError;
+
 use protobuf::Error as ProtobufError;
 use rustls::pki_types::InvalidDnsNameError;
 use serde_json::error::Error as SerializationError;
-use std::{
-    error::Error as StdError,
-    fmt::{Display, Formatter, Result},
-    io::Error as IoError,
-};
+use thiserror::Error;
 
 /// Consolidates possible error types that can occur in the lib.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// This variant is used when error occurs in the lib logic.
+    #[error("an internal error occurred, {}", _0)]
     Internal(String),
     /// This variant includes everything related to the network connection.
+    #[error("{}", _0)]
     Io(IoError),
     /// This variant includes all possible errors that come from Protobuf layer.
+    #[error("{}", _0)]
     Protobuf(ProtobufError),
     /// Errors with JSON (de)serialization of incoming and outgoing
     /// messages.
+    #[error("{}", _0)]
     Serialization(SerializationError),
     /// Errors parsing messages (valid JSON but bad semantics)
+    #[error("{}", _0)]
     Parsing(String),
     /// This variant is used to indicate invalid DNS name used to connect to Cast device.
+    #[error("{}", _0)]
     Dns(InvalidDnsNameError),
     /// This variant includes any error that comes from rustls.
+    #[error("{}", _0)]
     Tls(rustls::Error),
     /// Problems with given namespace
+    #[error("{}", _0)]
     Namespace(String),
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        match *self {
-            Error::Internal(ref message) => f.write_str(message),
-            Error::Io(ref err) => Display::fmt(&err, f),
-            Error::Protobuf(ref err) => Display::fmt(&err, f),
-            Error::Serialization(ref err) => Display::fmt(&err, f),
-            Error::Parsing(ref message) => f.write_str(message),
-            Error::Tls(ref err) => Display::fmt(&err, f),
-            Error::Dns(ref err) => Display::fmt(&err, f),
-            Error::Namespace(ref err) => Display::fmt(&err, f),
-        }
-    }
-}
-
-impl StdError for Error {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match *self {
-            Error::Io(ref err) => Some(err),
-            Error::Protobuf(ref err) => Some(err),
-            Error::Tls(ref err) => Some(err),
-            Error::Dns(ref err) => Some(err),
-            Error::Serialization(ref err) => Some(err),
-            Error::Internal(_) => None,
-            Error::Parsing(_) => None,
-            Error::Namespace(_) => None,
-        }
-    }
+    /// This variant is used when login blocks take too long.
+    #[error("{}", _0)]
+    Timeout(String),
 }
 
 impl From<IoError> for Error {
