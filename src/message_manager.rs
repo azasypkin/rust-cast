@@ -60,7 +60,7 @@ impl<T> Lock<T> {
 }
 
 /// Type of the payload that `CastMessage` can have.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CastMessagePayload {
     /// Payload represented by UTF-8 string (usually it's just a JSON string).
     String(String),
@@ -69,7 +69,7 @@ pub enum CastMessagePayload {
 }
 
 /// Base structure that represents messages that are exchanged between Receiver and Sender.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CastMessage {
     /// A namespace is a labeled protocol. That is, messages that are exchanged throughout the
     /// Cast ecosystem utilize namespaces to identify the protocol of the message being sent.
@@ -269,5 +269,79 @@ where
                 }
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use protobuf::EnumOrUnknown;
+
+    use crate::{tests::MockTcpStream, DEFAULT_RECEIVER_ID, DEFAULT_SENDER_ID};
+
+    use super::*;
+
+    #[test]
+    fn test_receive() {
+        let mut stream = MockTcpStream::new();
+        let payload = r#"{"type":"PING"}"#;
+        stream.add_message(cast_channel::CastMessage {
+            protocol_version: Some(EnumOrUnknown::new(ProtocolVersion::CASTV2_1_2)),
+            source_id: Some(DEFAULT_RECEIVER_ID.to_string()),
+            destination_id: Some(DEFAULT_SENDER_ID.to_string()),
+            namespace: Some(crate::channels::heartbeat::CHANNEL_NAMESPACE.to_string()),
+            payload_type: Some(EnumOrUnknown::new(PayloadType::STRING)),
+            payload_utf8: Some(payload.to_string()),
+            payload_binary: None,
+            continued: None,
+            remaining_length: None,
+            special_fields: Default::default(),
+        });
+        let message_manager = MessageManager::new(stream);
+        let expected_result = CastMessage {
+            namespace: crate::channels::heartbeat::CHANNEL_NAMESPACE.to_string(),
+            source: DEFAULT_RECEIVER_ID.to_string(),
+            destination: DEFAULT_SENDER_ID.to_string(),
+            payload: CastMessagePayload::String(payload.to_string()),
+        };
+
+        let result = message_manager
+            .receive()
+            .expect("expected to receive a message");
+
+        assert_eq!(expected_result, result);
+    }
+
+    #[test]
+    fn test_send() {
+        let payload = r#"{"type":"PONG"}"#;
+        let namespace = crate::channels::heartbeat::CHANNEL_NAMESPACE;
+        let stream = MockTcpStream::new();
+        let message_manager = MessageManager::new(stream.clone());
+        let expected_message = cast_channel::CastMessage {
+            protocol_version: Some(EnumOrUnknown::new(ProtocolVersion::CASTV2_1_0)),
+            source_id: Some(DEFAULT_SENDER_ID.to_string()),
+            destination_id: Some(DEFAULT_RECEIVER_ID.to_string()),
+            namespace: Some(namespace.to_string()),
+            payload_type: Some(EnumOrUnknown::new(PayloadType::STRING)),
+            payload_utf8: Some(payload.to_string()),
+            payload_binary: None,
+            continued: None,
+            remaining_length: None,
+            special_fields: Default::default(),
+        };
+
+        message_manager
+            .send(CastMessage {
+                namespace: namespace.to_string(),
+                source: DEFAULT_SENDER_ID.to_string(),
+                destination: DEFAULT_RECEIVER_ID.to_string(),
+                payload: CastMessagePayload::String(payload.to_string()),
+            })
+            .unwrap();
+
+        let tcp_message = stream
+            .received_message(0)
+            .expect("expected a message to have been received");
+        assert_eq!(expected_message, tcp_message.message());
     }
 }

@@ -16,7 +16,7 @@ use crate::{
     Lrc,
 };
 
-const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.receiver";
+pub(crate) const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.receiver";
 
 const MESSAGE_TYPE_LAUNCH: &str = "LAUNCH";
 const MESSAGE_TYPE_STOP: &str = "STOP";

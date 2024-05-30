@@ -10,7 +10,7 @@ use crate::{
     Lrc,
 };
 
-const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.tp.heartbeat";
+pub(crate) const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.tp.heartbeat";
 
 const MESSAGE_TYPE_PING: &str = "PING";
 const MESSAGE_TYPE_PONG: &str = "PONG";

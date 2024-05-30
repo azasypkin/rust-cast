@@ -10,7 +10,7 @@ use crate::{
     Lrc,
 };
 
-const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.tp.connection";
+pub(crate) const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.tp.connection";
 const CHANNEL_USER_AGENT: &str = "RustCast";
 
 const MESSAGE_TYPE_CONNECT: &str = "CONNECT";

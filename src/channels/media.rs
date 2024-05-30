@@ -13,7 +13,7 @@ use crate::{
     Lrc,
 };
 
-const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.media";
+pub(crate) const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.media";
 
 const MESSAGE_TYPE_GET_STATUS: &str = "GET_STATUS";
 const MESSAGE_TYPE_LOAD: &str = "LOAD";
@@ -66,7 +66,7 @@ impl fmt::Display for StreamType {
 }
 
 /// Generic, movie, TV show, music track, or photo metadata.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Metadata {
     Generic(GenericMediaMetadata),
     Movie(MovieMediaMetadata),
@@ -201,7 +201,7 @@ impl TryFrom<&proxies::media::Metadata> for Metadata {
 /// Generic media metadata.
 ///
 /// See also the [`GenericMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#GenericMediaMetadata).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct GenericMediaMetadata {
     /// Descriptive title of the content.
     pub title: Option<String>,
@@ -216,7 +216,7 @@ pub struct GenericMediaMetadata {
 /// Movie media metadata.
 ///
 /// See also the [`MovieMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#MovieMediaMetadata).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct MovieMediaMetadata {
     /// Title of the movie.
     pub title: Option<String>,
@@ -233,7 +233,7 @@ pub struct MovieMediaMetadata {
 /// TV show media metadata.
 ///
 /// See also the [`TvShowMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#TvShowMediaMetadata).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TvShowMediaMetadata {
     /// Title of the TV series.
     pub series_title: Option<String>,
@@ -252,7 +252,7 @@ pub struct TvShowMediaMetadata {
 /// Music track media metadata.
 ///
 /// See also the [`MusicTrackMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#MusicTrackMediaMetadata).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct MusicTrackMediaMetadata {
     /// Album or collection from which the track is taken.
     pub album_name: Option<String>,
@@ -277,7 +277,7 @@ pub struct MusicTrackMediaMetadata {
 /// Photo media metadata.
 ///
 /// See also the [`PhotoMediaMetadata` Cast reference](https://developers.google.com/cast/docs/reference/messages#PhotoMediaMetadata).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct PhotoMediaMetadata {
     /// Title of the photograph.
     pub title: Option<String>,
@@ -301,7 +301,7 @@ pub struct PhotoMediaMetadata {
 /// of images.
 ///
 /// See also the [`Image` Cast reference](https://developers.google.com/cast/docs/reference/messages#Image).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Image {
     /// URL of the image.
     pub url: String,
@@ -524,7 +524,7 @@ impl fmt::Display for ResumeState {
 }
 
 /// This data structure describes a media stream.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Media {
     /// Service-specific identifier of the content currently loaded by the media player. This is a
     /// free form string and is specific to the application. In most cases, this will be the URL to
@@ -615,7 +615,7 @@ impl MediaQueue {
 }
 
 /// Describes the current status of the media artifact with respect to the session.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Status {
     /// Unique id of the request that requested the status.
     pub request_id: u32,
@@ -624,7 +624,7 @@ pub struct Status {
 }
 
 /// Status of loading the next media
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ExtendedStatus {
     /// Describes the state of the player.
     pub player_state: ExtendedPlayerState,
@@ -650,7 +650,7 @@ impl TryFrom<&proxies::media::ExtendedStatus> for ExtendedStatus {
 }
 
 /// Detailed status of the media artifact with respect to the session.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StatusEntry {
     /// Unique ID for the playback of this specific session. This ID is set by the receiver at LOAD
     /// and can be used to identify a specific instance of a playback. For example, two playbacks of
@@ -725,21 +725,21 @@ impl TryFrom<&proxies::media::Status> for StatusEntry {
 }
 
 /// Describes the load cancelled error.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct LoadCancelled {
     /// Unique id of the request that caused this error.
     pub request_id: u32,
 }
 
 /// Describes the load failed error.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct LoadFailed {
     /// Unique id of the request that caused this error.
     pub request_id: u32,
 }
 
 /// The additional options for a load command request.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct LoadOptions {
     /// The current time of the content to start the playback at.
     pub current_time: f64,
@@ -757,14 +757,14 @@ impl Default for LoadOptions {
 }
 
 /// Describes the invalid player state error.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct InvalidPlayerState {
     /// Unique id of the request that caused this error.
     pub request_id: u32,
 }
 
 /// Describes the invalid request error.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct InvalidRequest {
     /// Unique id of the invalid request.
     pub request_id: u32,
@@ -921,7 +921,7 @@ impl TryFrom<i32> for MediaDetailedErrorCode {
 }
 
 /// Represents all currently supported incoming messages that media channel can handle.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MediaResponse {
     /// Statuses of the currently active media.
     Status(Status),
@@ -1539,7 +1539,7 @@ where
 mod tests {
     use crate::{
         cast::cast_channel::cast_message::{PayloadType, ProtocolVersion},
-        channels::tests::MockTcpStream,
+        tests::MockTcpStream,
         DEFAULT_RECEIVER_ID, DEFAULT_SENDER_ID,
     };
     use protobuf::EnumOrUnknown;
@@ -1564,7 +1564,7 @@ mod tests {
         }}"#,
             MESSAGE_TYPE_MEDIA_STATUS
         );
-        stream.set_message(crate::cast::cast_channel::CastMessage {
+        stream.add_message(crate::cast::cast_channel::CastMessage {
             protocol_version: Some(EnumOrUnknown::new(ProtocolVersion::CASTV2_1_2)),
             source_id: Some(DEFAULT_RECEIVER_ID.to_string()),
             destination_id: Some(DEFAULT_SENDER_ID.to_string()),
@@ -1613,11 +1613,7 @@ mod tests {
 
         let response = channel.parse(&message).unwrap();
 
-        if let MediaResponse::Error(result) = response {
-            assert_eq!(expected_result, result);
-        } else {
-            panic!("expected MediaResponse::Error, but got {:?}", response);
-        }
+        assert_eq!(MediaResponse::Error(expected_result), response);
     }
 
     #[test]
@@ -1631,18 +1627,16 @@ mod tests {
             destination: DEFAULT_SENDER_ID.to_string(),
             payload: CastMessagePayload::String(payload),
         };
+        let stream = MockTcpStream::new();
         let channel = MediaChannel {
             sender: Cow::from(DEFAULT_SENDER_ID),
-            message_manager: Lrc::new(MessageManager::new(MockTcpStream::new())),
+            message_manager: Lrc::new(MessageManager::new(stream)),
         };
+        let expected_result =
+            MediaResponse::NotImplemented(message_type.to_string(), expected_payload);
 
-        let response = channel.parse(&message).unwrap();
+        let result = channel.parse(&message).unwrap();
 
-        if let MediaResponse::NotImplemented(result_code, result_payload) = response {
-            assert_eq!(message_type, result_code);
-            assert_eq!(expected_payload, result_payload);
-        } else {
-            panic!("expected MediaResponse::Error, but got {:?}", response);
-        }
+        assert_eq!(expected_result, result);
     }
 }

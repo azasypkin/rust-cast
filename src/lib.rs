@@ -1,15 +1,13 @@
 #![deny(warnings)]
 
-#[cfg(not(feature = "cast"))]
-mod cast;
-#[cfg(feature = "cast")]
-pub mod cast;
-pub mod channels;
-pub mod errors;
-pub mod message_manager;
-mod utils;
-
 use std::{borrow::Cow, net::TcpStream, sync::Arc};
+
+use rustls::{
+    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+    crypto::{aws_lc_rs::default_provider, verify_tls12_signature, verify_tls13_signature},
+    pki_types::{CertificateDer, ServerName, UnixTime},
+    ClientConfig, ClientConnection, DigitallySignedStruct, RootCertStore, StreamOwned,
+};
 
 use channels::{
     connection::{ConnectionChannel, ConnectionResponse},
@@ -20,12 +18,14 @@ use channels::{
 use errors::Error;
 use message_manager::{CastMessage, MessageManager};
 
-use rustls::{
-    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    crypto::{aws_lc_rs::default_provider, verify_tls12_signature, verify_tls13_signature},
-    pki_types::{CertificateDer, ServerName, UnixTime},
-    ClientConfig, ClientConnection, DigitallySignedStruct, RootCertStore, StreamOwned,
-};
+#[cfg(not(feature = "cast"))]
+mod cast;
+#[cfg(feature = "cast")]
+pub mod cast;
+pub mod channels;
+pub mod errors;
+pub mod message_manager;
+mod utils;
 
 const DEFAULT_SENDER_ID: &str = "sender-0";
 const DEFAULT_RECEIVER_ID: &str = "receiver-0";
@@ -274,6 +274,17 @@ impl<'a> CastDevice<'a> {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use byteorder::{BigEndian, WriteBytesExt};
+    use log::warn;
+    use protobuf::Message;
+    use std::{
+        fmt::Display,
+        io::{Read, Write},
+        sync::{Arc, RwLock},
+    };
+
+    use crate::{cast::cast_channel, utils::read_u32_from_buffer};
+
     #[test]
     #[cfg(feature = "thread_safe")]
     fn test_thread_safe() {
@@ -284,6 +295,226 @@ pub(crate) mod tests {
 
         is_sync::<CastDevice>();
         is_send::<CastDevice>();
+    }
+
+    /// Represents the reader half of a split mock TCP stream for testing purposes.
+    #[derive(Debug)]
+    pub struct ReaderHalf(MockTcpStream);
+
+    impl Read for ReaderHalf {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.0.inner_read(buf)
+        }
+    }
+
+    /// Represents the writer half of a split mock TCP stream for testing purposes.
+    #[derive(Debug)]
+    pub struct WriterHalf<'a>(&'a MockTcpStream);
+
+    impl<'a> Write for WriterHalf<'a> {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.inner_write(buf)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.0.inner_flush()
+        }
+    }
+
+    /// A mock implementation of a TCP stream for testing purposes.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use rust_cast::channels::media::MediaChannel;
+    /// use rust_cast::message_manager::MessageManager;
+    /// use rust_cast::Lrc;
+    ///
+    /// let stream = MockTcpStream::new();
+    /// let message_manager = Lrc::new(MessageManager::new(stream));
+    /// let channel = MediaChannel::new(
+    ///     "sender-0",
+    ///     message_manager
+    /// );
+    /// ```
+    #[derive(Debug, Default, Clone)]
+    pub struct MockTcpStream {
+        /// Inner stream of the TCP stream which allows cloning and referencing the same stream source.
+        inner: Arc<RwLock<InnerStream>>,
+    }
+
+    impl MockTcpStream {
+        /// Creates a new empty `MockTcpStream` instance.
+        pub fn new() -> Self {
+            MockTcpStream {
+                inner: Arc::new(RwLock::new(InnerStream::default())),
+            }
+        }
+
+        /// Add a response message to be returned by read operations on the stream.
+        pub fn add_message<M: protobuf::Message>(&mut self, message: M) {
+            let message = message.write_to_bytes().unwrap();
+            let mut mutex = self.inner.write().unwrap();
+            mutex.response_messages.push(message);
+        }
+
+        /// Returns the received message at the given index if present, else [None].
+        pub fn received_message(&self, index: usize) -> Option<TcpMessage> {
+            self.inner
+                .read()
+                .expect("expected to acquire read lock")
+                .received_messages
+                .get(index)
+                .cloned()
+        }
+
+        fn inner_read(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.inner.write().unwrap().read(buf)
+        }
+
+        fn inner_write(&self, buf: &[u8]) -> std::io::Result<usize> {
+            self.inner.write().unwrap().write(buf)
+        }
+
+        fn inner_flush(&self) -> std::io::Result<()> {
+            self.inner.write().unwrap().flush()
+        }
+    }
+
+    impl Read for MockTcpStream {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.inner_read(buf)
+        }
+    }
+
+    impl Write for MockTcpStream {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.inner_write(buf)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.inner_flush()
+        }
+    }
+
+    /// Represents a TCP message containing a received payload from the sender.
+    #[derive(Debug, Clone)]
+    pub struct TcpMessage {
+        /// The known length of the message.
+        pub message_length: u32,
+        /// The payload of the message.
+        pub payload: Vec<u8>,
+    }
+
+    impl TcpMessage {
+        /// Parses and returns the CastMessage contained in the payload.
+        pub fn message(&self) -> cast_channel::CastMessage {
+            <cast_channel::CastMessage as Message>::parse_from_bytes(self.payload.as_slice())
+                .unwrap()
+        }
+    }
+
+    impl Display for TcpMessage {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", String::from_utf8_lossy(self.payload.as_slice()))
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    enum CursorLocation {
+        Length,
+        Payload,
+    }
+
+    #[derive(Debug, Clone)]
+    struct ReadCursor {
+        pub location: CursorLocation,
+        pub index: usize,
+    }
+
+    impl ReadCursor {
+        pub fn next(&self) -> Self {
+            match self.location {
+                CursorLocation::Length => Self {
+                    location: CursorLocation::Payload,
+                    index: self.index,
+                },
+                CursorLocation::Payload => Self {
+                    location: CursorLocation::Length,
+                    index: self.index + 1,
+                },
+            }
+        }
+    }
+
+    impl Default for ReadCursor {
+        fn default() -> Self {
+            Self {
+                location: CursorLocation::Length,
+                index: 0,
+            }
+        }
+    }
+
+    /// Inner representation of a stream used by `MockTcpStream` for testing purposes.
+    #[derive(Debug, Default)]
+    struct InnerStream {
+        /// The current position of the read cursor.
+        cursor: ReadCursor,
+        /// Buffer containing the messages which should be returned by the read operation.
+        response_messages: Vec<Vec<u8>>,
+        /// Buffer for storing the payload of the current message being written.
+        payload_buffer: Option<TcpMessage>,
+        /// Vector containing the received messages from the sender.
+        received_messages: Vec<TcpMessage>,
+    }
+
+    impl Read for InnerStream {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if let Some(message) = self.response_messages.get(self.cursor.index) {
+                let result: std::io::Result<usize> = match &self.cursor.location {
+                    CursorLocation::Length => {
+                        let mut len = Vec::<u8>::new();
+                        len.write_u32::<BigEndian>(message.len() as u32).unwrap();
+                        buf[..4].copy_from_slice(len.as_slice());
+                        Ok(4)
+                    }
+                    CursorLocation::Payload => {
+                        let len = message.len();
+                        buf[..len].copy_from_slice(message.as_slice());
+                        Ok(len)
+                    }
+                };
+
+                self.cursor = self.cursor.next();
+                result
+            } else {
+                warn!("No more messages to read");
+                Ok(0)
+            }
+        }
+    }
+
+    impl Write for InnerStream {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            if let Some(mut payload_buffer) = self.payload_buffer.take() {
+                payload_buffer.payload = buf.to_vec();
+                self.received_messages.push(payload_buffer);
+            } else {
+                let length = read_u32_from_buffer(buf).unwrap();
+                self.payload_buffer = Some(TcpMessage {
+                    message_length: length,
+                    payload: vec![],
+                });
+            }
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            // flush is never called when sending messages
+            // so we don't execute any logic here
+            Ok(())
+        }
     }
 }
 
