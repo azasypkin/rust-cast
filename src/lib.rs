@@ -399,6 +399,7 @@ pub(crate) mod tests {
 
     /// Represents a TCP message containing a received payload from the sender.
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     pub struct TcpMessage {
         /// The known length of the message.
         pub message_length: u32,

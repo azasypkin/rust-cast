@@ -339,6 +339,7 @@ pub mod media {
     }
 
     #[derive(Deserialize, Debug)]
+    #[allow(dead_code)]
     pub struct StatusReply {
         #[serde(rename = "requestId", default)]
         pub request_id: u32,
@@ -368,6 +369,7 @@ pub mod media {
     }
 
     #[derive(Deserialize, Debug)]
+    #[allow(dead_code)]
     pub struct InvalidRequestReply {
         #[serde(rename = "requestId")]
         pub request_id: u32,
@@ -441,6 +443,7 @@ pub mod receiver {
     }
 
     #[derive(Deserialize, Debug)]
+    #[allow(dead_code)]
     pub struct StatusReply {
         #[serde(rename = "requestId")]
         pub request_id: u32,
@@ -502,6 +505,7 @@ pub mod receiver {
     }
 
     #[derive(Deserialize, Debug)]
+    #[allow(dead_code)]
     pub struct LaunchErrorReply {
         #[serde(rename = "requestId")]
         pub request_id: u32,
@@ -513,6 +517,7 @@ pub mod receiver {
     }
 
     #[derive(Deserialize, Debug)]
+    #[allow(dead_code)]
     pub struct InvalidRequestReply {
         #[serde(rename = "requestId")]
         pub request_id: u32,
