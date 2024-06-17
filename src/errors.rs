@@ -9,32 +9,32 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     /// This variant is used when error occurs in the lib logic.
-    #[error("an internal error occurred, {}", _0)]
+    #[error("an internal error occurred, {0}")]
     Internal(String),
     /// This variant includes everything related to the network connection.
-    #[error("{}", _0)]
+    #[error("{0}")]
     Io(IoError),
     /// This variant includes all possible errors that come from Protobuf layer.
-    #[error("{}", _0)]
+    #[error("{0}")]
     Protobuf(ProtobufError),
     /// Errors with JSON (de)serialization of incoming and outgoing
     /// messages.
-    #[error("{}", _0)]
+    #[error("{0}")]
     Serialization(SerializationError),
     /// Errors parsing messages (valid JSON but bad semantics)
-    #[error("{}", _0)]
+    #[error("{0}")]
     Parsing(String),
     /// This variant is used to indicate invalid DNS name used to connect to Cast device.
-    #[error("{}", _0)]
+    #[error("{0}")]
     Dns(InvalidDnsNameError),
     /// This variant includes any error that comes from rustls.
-    #[error("{}", _0)]
+    #[error("{0}")]
     Tls(rustls::Error),
     /// Problems with given namespace
-    #[error("{}", _0)]
+    #[error("{0}")]
     Namespace(String),
-    /// This variant is used when login blocks take too long.
-    #[error("{}", _0)]
+    /// This variant is used when message retrieval takes too long.
+    #[error("{0}")]
     Timeout(String),
 }
 
