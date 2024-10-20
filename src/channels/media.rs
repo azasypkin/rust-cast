@@ -692,6 +692,7 @@ pub struct StatusEntry {
     /// * `1 << 12` `Unknown`;
     /// * `1 << 13` `Unknown`;
     /// * `1 << 18` `Unknown`.
+    ///
     /// Combinations are described as summations; for example, Pause+Seek+StreamVolume+Mute == 15.
     pub supported_media_commands: u32,
 }
@@ -969,7 +970,7 @@ where
     ///
     /// * `destination` - `protocol` identifier of specific app media session;
     /// * `media_session_id` - Media session ID of the media for which the media status should be
-    /// returned. If none is provided, then the status for all media session IDs will be provided.
+    ///   returned. If none is provided, then the status for all media session IDs will be provided.
     ///
     /// # Return value
     ///

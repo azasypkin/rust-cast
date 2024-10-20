@@ -199,8 +199,8 @@ where
     /// # Arguments
     ///
     /// * `f` - Function that analyzes and maps `CastMessage` to any other type. If message doesn't
-    /// look like something `f` is looking for, then `Ok(None)` should be returned so that message
-    /// is not lost and placed into internal message buffer for later retrieval.
+    ///   look like something `f` is looking for, then `Ok(None)` should be returned so that message
+    ///   is not lost and placed into internal message buffer for later retrieval.
     ///
     /// # Return value
     ///

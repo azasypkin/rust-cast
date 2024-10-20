@@ -1,6 +1,6 @@
 /// Proxy classes for the `connection` channel.
 pub mod connection {
-    use serde_derive::Serialize;
+    use serde::Serialize;
 
     #[derive(Serialize, Debug)]
     pub struct ConnectionRequest {
@@ -13,7 +13,7 @@ pub mod connection {
 
 /// Proxy classes for the `heartbeat` channel.
 pub mod heartbeat {
-    use serde_derive::Serialize;
+    use serde::Serialize;
 
     #[derive(Serialize, Debug)]
     pub struct HeartBeatRequest {
@@ -24,8 +24,7 @@ pub mod heartbeat {
 
 /// Proxy classes for the `media` channel.
 pub mod media {
-    use serde::Deserialize;
-    use serde_derive::Serialize;
+    use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Debug)]
     pub struct GetStatusRequest {
@@ -396,7 +395,7 @@ pub mod media {
 pub mod receiver {
     use std::borrow::Cow;
 
-    use serde_derive::{Deserialize, Serialize};
+    use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Debug)]
     pub struct AppLaunchRequest {
