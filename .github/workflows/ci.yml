@@ -14,12 +14,15 @@ on:
       - '*.md'
       - '*.json'
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   ci:
-    name: Build (Linux)
+    name: Build and Test on ${{ matrix.os }} with Rust ${{ matrix.rust }}
 
     strategy:
       matrix:
