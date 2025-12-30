@@ -4,10 +4,10 @@ use std::{
 };
 
 use crate::{
+    Lrc,
     cast::proxies,
     errors::Error,
     message_manager::{CastMessage, CastMessagePayload, MessageManager},
-    Lrc,
 };
 
 pub(crate) const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.tp.connection";
@@ -91,7 +91,7 @@ where
             _ => {
                 return Err(Error::Internal(
                     "Binary payload is not supported!".to_string(),
-                ))
+                ));
             }
         };
 

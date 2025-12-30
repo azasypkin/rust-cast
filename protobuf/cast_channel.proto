@@ -1,17 +1,9 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 syntax = "proto2";
-
 option optimize_for = LITE_RUNTIME;
-// TODO(crbug.com/openscreen/90): Rename to openscreen.cast, to update to the
-// current namespacing of the library. Also, this file should probably be moved
-// to the public directory. And, all of this will have to be coordinated with a
-// DEPS roll in Chromium (since Chromium code depends on this).
-
-package cast.channel;
-
+package openscreen.cast.proto;
 message CastMessage {
   // Always pass a version of the protocol for future compatibility
   // requirements.
@@ -22,7 +14,6 @@ message CastMessage {
     CASTV2_1_3 = 3;  // binary payload over utf8.
   }
   required ProtocolVersion protocol_version = 1;
-
   // source and destination ids identify the origin and destination of the
   // message.  They are used to route messages between endpoints that share a
   // device-to-device channel.
@@ -39,21 +30,17 @@ message CastMessage {
   // wildcard destination_id '*' can be used.
   required string source_id = 2;
   required string destination_id = 3;
-
   // This is the core multiplexing key.  All messages are sent on a namespace
   // and endpoints sharing a channel listen on one or more namespaces.  The
   // namespace defines the protocol and semantics of the message.
   required string namespace = 4;
-
   // Encoding and payload info follows.
-
   // What type of data do we have in this message.
   enum PayloadType {
     STRING = 0;
     BINARY = 1;
   }
   required PayloadType payload_type = 5;
-
   // Depending on payload_type, exactly one of the following optional fields
   // will always be set.
   optional string payload_utf8 = 6;
@@ -70,18 +57,15 @@ message CastMessage {
   // or in none of them.
   optional uint32 remaining_length = 9;
 }
-
 enum SignatureAlgorithm {
   UNSPECIFIED = 0;
   RSASSA_PKCS1v15 = 1;
   RSASSA_PSS = 2;
 }
-
 enum HashAlgorithm {
   SHA1 = 0;
   SHA256 = 1;
 }
-
 // Messages for authentication protocol between a sender and a receiver.
 message AuthChallenge {
   optional SignatureAlgorithm signature_algorithm = 1
@@ -89,7 +73,6 @@ message AuthChallenge {
   optional bytes sender_nonce = 2;
   optional HashAlgorithm hash_algorithm = 3 [default = SHA1];
 }
-
 message AuthResponse {
   required bytes signature = 1;
   required bytes client_auth_certificate = 2;
@@ -100,7 +83,6 @@ message AuthResponse {
   optional HashAlgorithm hash_algorithm = 6 [default = SHA1];
   optional bytes crl = 7;
 }
-
 message AuthError {
   enum ErrorType {
     INTERNAL_ERROR = 0;
@@ -109,7 +91,6 @@ message AuthError {
   }
   required ErrorType error_type = 1;
 }
-
 message DeviceAuthMessage {
   // Request fields
   optional AuthChallenge challenge = 1;

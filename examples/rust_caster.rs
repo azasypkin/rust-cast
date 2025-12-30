@@ -7,12 +7,12 @@ use mdns_sd::{ServiceDaemon, ServiceEvent};
 use serde::Deserialize;
 
 use rust_cast::{
+    CastDevice, ChannelMessage,
     channels::{
         heartbeat::HeartbeatResponse,
         media::{Media, StatusEntry, StreamType},
         receiver::CastDeviceApp,
     },
-    CastDevice, ChannelMessage,
 };
 
 const SERVICE_TYPE: &str = "_googlecast._tcp.local.";

@@ -3,10 +3,10 @@
 use std::{borrow::Cow, net::TcpStream, sync::Arc};
 
 use rustls::{
+    ClientConfig, ClientConnection, DigitallySignedStruct, RootCertStore, StreamOwned,
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     crypto::{aws_lc_rs::default_provider, verify_tls12_signature, verify_tls13_signature},
     pki_types::{CertificateDer, ServerName, UnixTime},
-    ClientConfig, ClientConnection, DigitallySignedStruct, RootCertStore, StreamOwned,
 };
 
 use channels::{
@@ -295,30 +295,6 @@ pub(crate) mod tests {
 
         is_sync::<CastDevice>();
         is_send::<CastDevice>();
-    }
-
-    /// Represents the reader half of a split mock TCP stream for testing purposes.
-    #[derive(Debug)]
-    pub struct ReaderHalf(MockTcpStream);
-
-    impl Read for ReaderHalf {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            self.0.inner_read(buf)
-        }
-    }
-
-    /// Represents the writer half of a split mock TCP stream for testing purposes.
-    #[derive(Debug)]
-    pub struct WriterHalf<'a>(&'a MockTcpStream);
-
-    impl<'a> Write for WriterHalf<'a> {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0.inner_write(buf)
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            self.0.inner_flush()
-        }
     }
 
     /// A mock implementation of a TCP stream for testing purposes.

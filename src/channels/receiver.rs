@@ -10,10 +10,10 @@ use std::{
 use serde::Serialize;
 
 use crate::{
+    Lrc,
     cast::proxies,
     errors::Error,
     message_manager::{CastMessage, CastMessagePayload, MessageManager},
-    Lrc,
 };
 
 pub(crate) const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.receiver";
@@ -372,10 +372,10 @@ where
             }
 
             let message = self.parse(message)?;
-            if let ReceiverResponse::Status(status) = message {
-                if status.request_id == request_id {
-                    return Ok(Some(status));
-                }
+            if let ReceiverResponse::Status(status) = message
+                && status.request_id == request_id
+            {
+                return Ok(Some(status));
             }
 
             Ok(None)
@@ -387,7 +387,7 @@ where
     /// # Arguments
     ///
     /// * `volume` - anything that can be converted to a valid `Volume` structure. It's possible to
-    ///              set volume level, mute/unmute state or both altogether.
+    ///   set volume level, mute/unmute state or both altogether.
     ///
     /// # Return value
     ///
@@ -425,10 +425,10 @@ where
             }
 
             let message = self.parse(message)?;
-            if let ReceiverResponse::Status(status) = message {
-                if status.request_id == request_id {
-                    return Ok(Some(status.volume));
-                }
+            if let ReceiverResponse::Status(status) = message
+                && status.request_id == request_id
+            {
+                return Ok(Some(status.volume));
             }
 
             Ok(None)
@@ -447,7 +447,7 @@ where
             _ => {
                 return Err(Error::Internal(
                     "Binary payload is not supported!".to_string(),
-                ))
+                ));
             }
         };
 

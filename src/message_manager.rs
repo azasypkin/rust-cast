@@ -276,7 +276,7 @@ where
 mod tests {
     use protobuf::EnumOrUnknown;
 
-    use crate::{tests::MockTcpStream, DEFAULT_RECEIVER_ID, DEFAULT_SENDER_ID};
+    use crate::{DEFAULT_RECEIVER_ID, DEFAULT_SENDER_ID, tests::MockTcpStream};
 
     use super::*;
 

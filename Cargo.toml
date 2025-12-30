@@ -10,7 +10,7 @@ keywords = ["cast", "chromecast", "google"]
 version = "0.20.0"
 authors = ["Aleh Zasypkin <aleh.zasypkin@gmail.com>"]
 categories = ["api-bindings", "hardware-support", "multimedia"]
-edition = "2021"
+edition = "2024"
 exclude = [
     ".github/*",
     "examples/*",
@@ -20,7 +20,7 @@ exclude = [
 [dependencies]
 byteorder = "1.5"
 log = "0.4"
-protobuf = "=3.7.1"
+protobuf = "=3.7.2"
 rustls = "0.23"
 rustls-native-certs = "0.8"
 serde = { version = "1", features = ["derive"] }
@@ -34,7 +34,7 @@ env_logger = "0.11"
 mdns-sd = "0.11"
 
 [build-dependencies]
-protobuf-codegen = "=3.7.1"
+protobuf-codegen = "=3.7.2"
 
 [features]
 thread_safe = []

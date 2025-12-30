@@ -7,7 +7,7 @@
 
 # Build
 
-Proto files are taken from [Chromium Open Screen GitHub mirror](https://chromium.googlesource.com/openscreen/+/8cce349b0a595ddf7178d5730e980ace3a1d1a53/cast/common/channel/proto).
+Proto files are taken from [Chromium Open Screen GitHub mirror](https://chromium.googlesource.com/openscreen/+/37a17677e5ded963fc41a3d8dee7a59484e5ec13/cast/common/channel/proto).
 
 By default `cargo build` won't try to generate Rust code from the files located at `protobuf/*`, if you want to do that
 use `GENERATE_PROTO` environment variable during build and make sure you have `protoc` binary in `$PATH`:

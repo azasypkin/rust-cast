@@ -7,10 +7,10 @@ use std::{
 };
 
 use crate::{
+    Lrc,
     cast::proxies,
     errors::Error,
     message_manager::{CastMessage, CastMessagePayload, MessageManager},
-    Lrc,
 };
 
 pub(crate) const CHANNEL_NAMESPACE: &str = "urn:x-cast:com.google.cast.media";
@@ -78,14 +78,14 @@ pub enum Metadata {
 impl Metadata {
     fn encode(&self) -> proxies::media::Metadata {
         match self {
-            Metadata::Generic(ref x) => proxies::media::Metadata {
+            Metadata::Generic(x) => proxies::media::Metadata {
                 title: x.title.clone(),
                 subtitle: x.subtitle.clone(),
                 images: x.images.iter().map(|i| i.encode()).collect(),
                 release_date: x.release_date.clone(),
                 ..proxies::media::Metadata::new(0)
             },
-            Metadata::Movie(ref x) => proxies::media::Metadata {
+            Metadata::Movie(x) => proxies::media::Metadata {
                 title: x.title.clone(),
                 subtitle: x.subtitle.clone(),
                 studio: x.studio.clone(),
@@ -93,7 +93,7 @@ impl Metadata {
                 release_date: x.release_date.clone(),
                 ..proxies::media::Metadata::new(1)
             },
-            Metadata::TvShow(ref x) => proxies::media::Metadata {
+            Metadata::TvShow(x) => proxies::media::Metadata {
                 series_title: x.series_title.clone(),
                 subtitle: x.episode_title.clone(),
                 season: x.season,
@@ -102,7 +102,7 @@ impl Metadata {
                 original_air_date: x.original_air_date.clone(),
                 ..proxies::media::Metadata::new(2)
             },
-            Metadata::MusicTrack(ref x) => proxies::media::Metadata {
+            Metadata::MusicTrack(x) => proxies::media::Metadata {
                 album_name: x.album_name.clone(),
                 title: x.title.clone(),
                 album_artist: x.album_artist.clone(),
@@ -114,7 +114,7 @@ impl Metadata {
                 release_date: x.release_date.clone(),
                 ..proxies::media::Metadata::new(3)
             },
-            Metadata::Photo(ref x) => proxies::media::Metadata {
+            Metadata::Photo(x) => proxies::media::Metadata {
                 title: x.title.clone(),
                 artist: x.artist.clone(),
                 location: x.location.clone(),
@@ -169,15 +169,15 @@ impl TryFrom<&proxies::media::Metadata> for Metadata {
             4 => {
                 let mut dimensions = None;
                 let mut latitude_longitude = None;
-                if let Some(width) = m.width {
-                    if let Some(height) = m.height {
-                        dimensions = Some((width, height))
-                    }
+                if let Some(width) = m.width
+                    && let Some(height) = m.height
+                {
+                    dimensions = Some((width, height))
                 }
-                if let Some(lat) = m.latitude {
-                    if let Some(long) = m.longitude {
-                        latitude_longitude = Some((lat, long))
-                    }
+                if let Some(lat) = m.latitude
+                    && let Some(long) = m.longitude
+                {
+                    latitude_longitude = Some((lat, long))
                 }
                 Self::Photo(PhotoMediaMetadata {
                     title: m.title.clone(),
@@ -329,10 +329,10 @@ impl Image {
 impl From<&proxies::media::Image> for Image {
     fn from(i: &proxies::media::Image) -> Self {
         let mut dimensions = None;
-        if let Some(width) = i.width {
-            if let Some(height) = i.height {
-                dimensions = Some((width, height));
-            }
+        if let Some(width) = i.width
+            && let Some(height) = i.height
+        {
+            dimensions = Some((width, height));
         };
         Self {
             url: i.url.clone(),
@@ -1539,9 +1539,9 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
+        DEFAULT_RECEIVER_ID, DEFAULT_SENDER_ID,
         cast::cast_channel::cast_message::{PayloadType, ProtocolVersion},
         tests::MockTcpStream,
-        DEFAULT_RECEIVER_ID, DEFAULT_SENDER_ID,
     };
     use protobuf::EnumOrUnknown;
 
